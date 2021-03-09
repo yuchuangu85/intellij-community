@@ -9,8 +9,8 @@ import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.roots.*;
 import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.roots.ui.configuration.ModuleEditor;
-import com.intellij.openapi.roots.ui.configuration.ProjectStructureConfigurable;
 import com.intellij.openapi.roots.ui.configuration.projectRoot.StructureConfigurableContext;
+import com.intellij.ui.navigation.Place;
 import com.intellij.util.ArrayUtil;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
@@ -51,7 +51,7 @@ public class ModuleProjectStructureElement extends ProjectStructureElement {
   public void check(ProjectStructureProblemsHolder problemsHolder) {
     checkModulesNames(problemsHolder);
 
-    final ModuleRootModel rootModel = myContext.getModulesConfigurator().getRootModel(myModule);
+    final ModuleRootModel rootModel = getRootModel();
     if (rootModel == null) return; //already disposed
     final OrderEntry[] entries = rootModel.getOrderEntries();
     for (OrderEntry entry : entries) {
@@ -71,9 +71,16 @@ public class ModuleProjectStructureElement extends ProjectStructureElement {
     }
   }
 
+  private ModuleRootModel getRootModel() {
+    ModuleEditor moduleEditor = myContext.getModulesConfigurator().getModuleEditor(myModule);
+    if (moduleEditor == null) return ModuleRootManager.getInstance(myModule);
+    return moduleEditor.getRootModel();
+  }
+
   private PlaceInProjectStructure createPlace() {
     final Project project = myContext.getProject();
-    return new PlaceInProjectStructureBase(project, ProjectStructureConfigurable.getInstance(project).createModulePlace(myModule), this);
+    Place place = myContext.getModulesConfigurator().getProjectStructureConfigurable().createModulePlace(myModule);
+    return new PlaceInProjectStructureBase(project, place, this);
   }
 
   private PlaceInProjectStructure createPlace(OrderEntry entry) {
@@ -83,9 +90,9 @@ public class ModuleProjectStructureElement extends ProjectStructureElement {
   @Override
   public List<ProjectStructureElementUsage> getUsagesInElement() {
     final List<ProjectStructureElementUsage> usages = new ArrayList<>();
-    final ModuleEditor moduleEditor = myContext.getModulesConfigurator().getModuleEditor(myModule);
-    if (moduleEditor != null) {
-      for (OrderEntry entry : moduleEditor.getOrderEntries()) {
+    final ModuleRootModel rootModel = getRootModel();
+    if (rootModel != null) {
+      for (OrderEntry entry : rootModel.getOrderEntries()) {
         if (entry instanceof ModuleOrderEntry) {
           ModuleOrderEntry moduleOrderEntry = (ModuleOrderEntry)entry;
           final Module module = moduleOrderEntry.getModule();
@@ -127,7 +134,7 @@ public class ModuleProjectStructureElement extends ProjectStructureElement {
   }
 
   @Override
-  public @Nls(capitalization = Nls.Capitalization.Sentence) String getPresentableName() {
+  public String getPresentableName() {
     return myModule.getName();
   }
 

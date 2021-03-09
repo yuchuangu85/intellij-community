@@ -1,7 +1,6 @@
 // Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.roots.ui.configuration;
 
-import com.intellij.CommonBundle;
 import com.intellij.ide.JavaUiBundle;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.options.Configurable;
@@ -23,7 +22,7 @@ import com.intellij.util.ui.StartupUiUtil;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.update.MergingUpdateQueue;
 import com.intellij.util.ui.update.Update;
-import com.intellij.xml.util.XmlStringUtil;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
@@ -37,6 +36,7 @@ import java.awt.event.MouseEvent;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.IntStream;
 
 /**
  * @author Konstantin Bulenkov
@@ -166,36 +166,63 @@ public class ErrorPaneConfigurable extends JPanel implements Configurable, Dispo
   @Contract(pure = true)
   private static HtmlChunk @NotNull[] getErrorDescriptions(final ConfigurationError @NotNull[] errors) {
     final int limit = Math.min(errors.length, 100);
-    final HtmlChunk[] liTags = new HtmlChunk[limit];
-    for (int i = 0; i < limit; i++) {
-      final ConfigurationError error = errors[i];
-      String description;
-      if (error instanceof ProjectConfigurationProblem) {
-        //todo[nik] pass ProjectStructureProblemDescription directly and get rid of ConfigurationError at all
-        ProjectStructureProblemDescription problemDescription = ((ProjectConfigurationProblem)error).getProblemDescription();
-        description = problemDescription.getDescription();
-        if (description == null) {
-          description = problemDescription.getMessage(false);
-          if (problemDescription.canShowPlace()) {
-            ProjectStructureElement place = problemDescription.getPlace().getContainingElement();
-            final String link = HtmlChunk.link("http://navigate/" + i, place.getPresentableName()).toString();
-            description = XmlStringUtil.convertToHtmlContent(description);
-            description = place.getTypeName() + " " + link + ": " + StringUtil.decapitalize(description);
-          }
-        }
-      }
-      else {
-        description = error.getDescription();
-      }
-      description = XmlStringUtil.convertToHtmlContent(description);
-      if (error.canBeFixed()) {
-        final String text = "[" + CommonBundle.message("fix.title") + "]";
-        description += " " + HtmlChunk.link("http://fix/" + i, text);
-      }
-      final HtmlChunk li = HtmlChunk.raw("<li>" + description + "</li>");
-      liTags[i] = li;
+
+    return StreamEx.of(errors)
+      .zipWith(IntStream.range(0, limit), ConfigurationErrorWithIndex::new)
+      .map(ErrorPaneConfigurable::getErrorDescriptionTag)
+      .toArray(HtmlChunk[]::new);
+  }
+
+  private static final class ConfigurationErrorWithIndex {
+    private final @NotNull ConfigurationError myError;
+    private final int myIdx;
+
+    private ConfigurationErrorWithIndex(@NotNull final ConfigurationError error, final int idx) {
+      myError = error;
+      myIdx = idx;
     }
-    return liTags;
+  }
+
+  @Contract(pure = true)
+  @NotNull
+  private static HtmlChunk getErrorDescriptionTag(@NotNull final ConfigurationErrorWithIndex errorIndex) {
+    final int index = errorIndex.myIdx;
+    final ConfigurationError error = errorIndex.myError ;
+
+    final HtmlChunk description = getErrorDescription(index, error);
+
+    if (!error.canBeFixed()) return description.wrapWith("li");
+
+    final String text = "[" + JavaUiBundle.message("fix.link.text") + "]";
+
+    return new HtmlBuilder().append(description)
+      .append(HtmlChunk.nbsp())
+      .append(HtmlChunk.link("http://fix/" + index, text))
+      .wrapWith("li");
+  }
+
+  @Contract(pure = true)
+  @NotNull
+  private static HtmlChunk getErrorDescription(final int index, @NotNull final ConfigurationError error) {
+    //todo[nik] pass ProjectStructureProblemDescription directly and get rid of ConfigurationError at all
+    if (!(error instanceof ProjectConfigurationProblem)) return error.getDescription();
+
+    final ProjectStructureProblemDescription problemDescription = ((ProjectConfigurationProblem)error).getProblemDescription();
+    if (!problemDescription.getDescription().isEmpty()) return problemDescription.getDescription();
+
+    if (!problemDescription.canShowPlace()) return HtmlChunk.raw(problemDescription.getMessage());
+
+    final String message = StringUtil.decapitalize(problemDescription.getMessage());
+
+    final ProjectStructureElement place = problemDescription.getPlace().getContainingElement();
+    final HtmlChunk link = HtmlChunk.link("http://navigate/" + index, place.getPresentableName());
+
+    return new HtmlBuilder().append(place.getTypeName())
+      .append(" ")
+      .append(link)
+      .append(": ")
+      .append(message)
+      .toFragment();
   }
 
   @Nls

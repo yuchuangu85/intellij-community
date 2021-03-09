@@ -2,11 +2,10 @@
 package com.intellij.usages.impl;
 
 import com.intellij.find.SearchInBackgroundOption;
+import com.intellij.ide.impl.DataManagerImpl;
 import com.intellij.injected.editor.VirtualFileWindow;
 import com.intellij.notebook.editor.BackedVirtualFile;
-import com.intellij.openapi.actionSystem.DataKey;
-import com.intellij.openapi.actionSystem.DataSink;
-import com.intellij.openapi.actionSystem.TypeSafeDataProvider;
+import com.intellij.openapi.actionSystem.DataProvider;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
@@ -17,6 +16,7 @@ import com.intellij.openapi.progress.util.TooManyUsagesStatus;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Factory;
 import com.intellij.openapi.util.Key;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.newvfs.impl.NullVirtualFile;
@@ -163,7 +163,8 @@ public class UsageViewManagerImpl extends UsageViewManager {
         int count = usageView == null ? 0 : usageView.getUsagesCount();
         String notification = StringUtil.capitalizeWords(UsageViewBundle.message("usages.n", count), true);
         LOG.debug(notification +" in "+(System.currentTimeMillis()-start) +"ms.");
-        return new NotificationInfo("Find Usages", UsageViewBundle.message("notification.title.find.usages.finished"), notification);
+        return new NotificationInfo("Find Usages",
+                                    UsageViewBundle.message("notification.title.find.usages.finished"), notification);
       }
     };
     ProgressManager.getInstance().run(task);
@@ -173,15 +174,10 @@ public class UsageViewManagerImpl extends UsageViewManager {
   @NotNull
   SearchScope getMaxSearchScopeToWarnOfFallingOutOf(UsageTarget @NotNull [] searchFor) {
     UsageTarget target = searchFor.length > 0 ? searchFor[0] : null;
-    if (target instanceof TypeSafeDataProvider) {
-      SearchScope[] scope = new SearchScope[1];
-      ((TypeSafeDataProvider)target).calcData(UsageView.USAGE_SCOPE, new DataSink() {
-        @Override
-        public <T> void put(DataKey<T> key, T data) {
-          scope[0] = (SearchScope)data;
-        }
-      });
-      return scope[0];
+    DataProvider dataProvider = DataManagerImpl.getDataProviderEx(target);
+    SearchScope scope = dataProvider != null ? UsageView.USAGE_SCOPE.getData(dataProvider) : null;
+    if (scope != null) {
+      return scope;
     }
     return GlobalSearchScope.everythingScope(myProject); // by default do not warn of falling out of scope
   }
@@ -206,10 +202,8 @@ public class UsageViewManagerImpl extends UsageViewManager {
   }
 
   @NotNull
-  public static String getProgressTitle(@NotNull UsageViewPresentation presentation) {
-    String scopeText = presentation.getScopeText();
-    String usagesString = StringUtil.capitalize(presentation.getSearchString());
-    return UsageViewBundle.message("search.progress.0.in.1", usagesString, scopeText);
+  public static @NlsContexts.ProgressTitle String getProgressTitle(@NotNull UsageViewPresentation presentation) {
+    return UsageViewBundle.message("search.progress.0.in.1", presentation.getSearchString(), presentation.getScopeText());
   }
 
   void showToolWindow(boolean activateWindow) {

@@ -2,12 +2,7 @@
 package com.intellij.psi.codeStyle;
 
 import com.intellij.openapi.util.NlsContexts;
-import org.jetbrains.annotations.Nls;
-import org.jetbrains.annotations.NonNls;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
-import static com.intellij.psi.codeStyle.CodeStyleSettingsCustomizableOptions.*;
+import org.jetbrains.annotations.*;
 
 public interface CodeStyleSettingsCustomizable {
   enum OptionAnchor {NONE, BEFORE, AFTER}
@@ -206,7 +201,9 @@ public interface CodeStyleSettingsCustomizable {
     ALIGN_CONSECUTIVE_VARIABLE_DECLARATIONS,
     ALIGN_CONSECUTIVE_ASSIGNMENTS,
     ALIGN_SUBSEQUENT_SIMPLE_METHODS,
-    INDENT_BREAK_FROM_CASE
+    INDENT_BREAK_FROM_CASE,
+    BUILDER_METHODS,
+    KEEP_BUILDER_METHODS_INDENTS
   }
 
   enum CommenterOption {
@@ -216,96 +213,107 @@ public interface CodeStyleSettingsCustomizable {
   }
 
   /**
-   * All deprecated constants are not localization friendly. Please, use respective suppliers from {@link CodeStyleSettingsCustomizableOptions}
+   * @deprecated Options blow are not locale-friendly, please use ones from  {@link CodeStyleSettingsCustomizableOptions#getInstance()} instead
    */
   @Deprecated
-  String SPACES_AROUND_OPERATORS = CodeStyleSettingsCustomizableOptions.SPACES_AROUND_OPERATORS.get();
+  @Nls String SPACES_AROUND_OPERATORS = CodeStyleSettingsCustomizableOptions.getInstance().SPACES_AROUND_OPERATORS;
   @Deprecated
-  String SPACES_BEFORE_PARENTHESES = CodeStyleSettingsCustomizableOptions.SPACES_BEFORE_PARENTHESES.get();
+  @Nls String SPACES_BEFORE_PARENTHESES = CodeStyleSettingsCustomizableOptions.getInstance().SPACES_BEFORE_PARENTHESES;
   @Deprecated
-  String SPACES_BEFORE_LEFT_BRACE = CodeStyleSettingsCustomizableOptions.SPACES_BEFORE_LEFT_BRACE.get();
+  @Nls String SPACES_BEFORE_LEFT_BRACE = CodeStyleSettingsCustomizableOptions.getInstance().SPACES_BEFORE_LEFT_BRACE;
   @Deprecated
-  String SPACES_BEFORE_KEYWORD = CodeStyleSettingsCustomizableOptions.SPACES_BEFORE_KEYWORD.get();
+  @Nls String SPACES_BEFORE_KEYWORD = CodeStyleSettingsCustomizableOptions.getInstance().SPACES_BEFORE_KEYWORD;
   @Deprecated
-  String SPACES_WITHIN = CodeStyleSettingsCustomizableOptions.SPACES_WITHIN.get();
+  @Nls String SPACES_WITHIN = CodeStyleSettingsCustomizableOptions.getInstance().SPACES_WITHIN;
   @Deprecated
-  String SPACES_IN_TERNARY_OPERATOR = CodeStyleSettingsCustomizableOptions.SPACES_IN_TERNARY_OPERATOR.get();
+  @Nls String SPACES_IN_TERNARY_OPERATOR = CodeStyleSettingsCustomizableOptions.getInstance().SPACES_IN_TERNARY_OPERATOR;
   @Deprecated
-  String SPACES_WITHIN_TYPE_ARGUMENTS = CodeStyleSettingsCustomizableOptions.SPACES_WITHIN_TYPE_ARGUMENTS.get();
+  @Nls String SPACES_WITHIN_TYPE_ARGUMENTS = CodeStyleSettingsCustomizableOptions.getInstance().SPACES_WITHIN_TYPE_ARGUMENTS;
   @Deprecated
-  String SPACES_IN_TYPE_ARGUMENTS = CodeStyleSettingsCustomizableOptions.SPACES_IN_TYPE_ARGUMENTS.get();
+  @Nls String SPACES_IN_TYPE_ARGUMENTS = CodeStyleSettingsCustomizableOptions.getInstance().SPACES_IN_TYPE_ARGUMENTS;
   @Deprecated
-  String SPACES_IN_TYPE_PARAMETERS = CodeStyleSettingsCustomizableOptions.SPACES_IN_TYPE_PARAMETERS.get();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String SPACES_IN_TYPE_PARAMETERS = CodeStyleSettingsCustomizableOptions.getInstance().SPACES_IN_TYPE_PARAMETERS;
   @Deprecated
-  String SPACES_OTHER = CodeStyleSettingsCustomizableOptions.SPACES_OTHER.get();
+  @Nls String SPACES_OTHER = CodeStyleSettingsCustomizableOptions.getInstance().SPACES_OTHER;
 
   @Deprecated
-  String BLANK_LINES_KEEP = CodeStyleSettingsCustomizableOptions.BLANK_LINES_KEEP.get();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String BLANK_LINES_KEEP = CodeStyleSettingsCustomizableOptions.getInstance().BLANK_LINES_KEEP;
   @Deprecated
-  String BLANK_LINES = CodeStyleSettingsCustomizableOptions.BLANK_LINES.get();
+  @Nls String BLANK_LINES = CodeStyleSettingsCustomizableOptions.getInstance().BLANK_LINES;
 
   @Deprecated
-  String WRAPPING_KEEP = CodeStyleSettingsCustomizableOptions.WRAPPING_KEEP.get();
+  @Nls String WRAPPING_KEEP = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_KEEP;
   @Deprecated
-  String WRAPPING_BRACES = CodeStyleSettingsCustomizableOptions.WRAPPING_BRACES.get();
+  @Nls String WRAPPING_BRACES = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_BRACES;
   @Deprecated
-  String WRAPPING_COMMENTS = CodeStyleSettingsCustomizableOptions.WRAPPING_COMMENTS.get();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String WRAPPING_COMMENTS = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_COMMENTS;
   @Deprecated
-  String WRAPPING_METHOD_PARAMETERS = CodeStyleSettingsCustomizableOptions.WRAPPING_METHOD_PARAMETERS.get();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String WRAPPING_METHOD_PARAMETERS = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_METHOD_PARAMETERS;
   @Deprecated
-  String WRAPPING_METHOD_PARENTHESES = CodeStyleSettingsCustomizableOptions.WRAPPING_METHOD_PARENTHESES.get();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String WRAPPING_METHOD_PARENTHESES = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_METHOD_PARENTHESES;
+  @Deprecated @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String WRAPPING_METHOD_ARGUMENTS_WRAPPING = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_METHOD_ARGUMENTS_WRAPPING;
   @Deprecated
-  String WRAPPING_METHOD_ARGUMENTS_WRAPPING = CodeStyleSettingsCustomizableOptions.WRAPPING_METHOD_ARGUMENTS_WRAPPING.get();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String WRAPPING_CALL_CHAIN = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_CALL_CHAIN;
   @Deprecated
-  String WRAPPING_CALL_CHAIN = CodeStyleSettingsCustomizableOptions.WRAPPING_CALL_CHAIN.get();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String WRAPPING_IF_STATEMENT = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_IF_STATEMENT;
   @Deprecated
-  String WRAPPING_IF_STATEMENT = CodeStyleSettingsCustomizableOptions.WRAPPING_IF_STATEMENT.get();
+  @Nls String WRAPPING_FOR_STATEMENT = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_FOR_STATEMENT;
   @Deprecated
-  String WRAPPING_FOR_STATEMENT = CodeStyleSettingsCustomizableOptions.WRAPPING_FOR_STATEMENT.get();
+  @Nls String WRAPPING_WHILE_STATEMENT = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_WHILE_STATEMENT;
   @Deprecated
-  String WRAPPING_WHILE_STATEMENT = CodeStyleSettingsCustomizableOptions.WRAPPING_WHILE_STATEMENT.get();
+  @Nls String WRAPPING_DOWHILE_STATEMENT = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_DOWHILE_STATEMENT;
+  @Deprecated @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String WRAPPING_SWITCH_STATEMENT = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_SWITCH_STATEMENT;
   @Deprecated
-  String WRAPPING_DOWHILE_STATEMENT = CodeStyleSettingsCustomizableOptions.WRAPPING_DOWHILE_STATEMENT.get();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String WRAPPING_TRY_STATEMENT = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_TRY_STATEMENT;
   @Deprecated
-  String WRAPPING_SWITCH_STATEMENT = CodeStyleSettingsCustomizableOptions.WRAPPING_SWITCH_STATEMENT.get();
+  @Nls String WRAPPING_TRY_RESOURCE_LIST = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_TRY_RESOURCE_LIST;
   @Deprecated
-  String WRAPPING_TRY_STATEMENT = CodeStyleSettingsCustomizableOptions.WRAPPING_TRY_STATEMENT.get();
+  @Nls String WRAPPING_BINARY_OPERATION = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_BINARY_OPERATION;
   @Deprecated
-  String WRAPPING_TRY_RESOURCE_LIST = CodeStyleSettingsCustomizableOptions.WRAPPING_TRY_RESOURCE_LIST.get();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String WRAPPING_EXTENDS_LIST = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_EXTENDS_LIST;
   @Deprecated
-  String WRAPPING_BINARY_OPERATION = CodeStyleSettingsCustomizableOptions.WRAPPING_BINARY_OPERATION.get();
+  @Nls String WRAPPING_EXTENDS_KEYWORD = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_EXTENDS_KEYWORD;
   @Deprecated
-  String WRAPPING_EXTENDS_LIST = CodeStyleSettingsCustomizableOptions.WRAPPING_EXTENDS_LIST.get();
+  @Nls String WRAPPING_THROWS_LIST = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_THROWS_LIST;
   @Deprecated
-  String WRAPPING_EXTENDS_KEYWORD = CodeStyleSettingsCustomizableOptions.WRAPPING_EXTENDS_KEYWORD.get();
+  @Nls String WRAPPING_THROWS_KEYWORD = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_THROWS_KEYWORD;
   @Deprecated
-  String WRAPPING_THROWS_LIST = CodeStyleSettingsCustomizableOptions.WRAPPING_THROWS_LIST.get();
+  @Nls String WRAPPING_TERNARY_OPERATION = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_TERNARY_OPERATION;
   @Deprecated
-  String WRAPPING_THROWS_KEYWORD = CodeStyleSettingsCustomizableOptions.WRAPPING_THROWS_KEYWORD.get();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String WRAPPING_ASSIGNMENT = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_ASSIGNMENT;
   @Deprecated
-  String WRAPPING_TERNARY_OPERATION = CodeStyleSettingsCustomizableOptions.WRAPPING_TERNARY_OPERATION.get();
+  @Nls String WRAPPING_FIELDS_VARIABLES_GROUPS = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_FIELDS_VARIABLES_GROUPS;
   @Deprecated
-  String WRAPPING_ASSIGNMENT = CodeStyleSettingsCustomizableOptions.WRAPPING_ASSIGNMENT.get();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String WRAPPING_ARRAY_INITIALIZER = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_ARRAY_INITIALIZER;
   @Deprecated
-  String WRAPPING_FIELDS_VARIABLES_GROUPS = CodeStyleSettingsCustomizableOptions.WRAPPING_FIELDS_VARIABLES_GROUPS.get();
+  @Nls String WRAPPING_MODIFIER_LIST = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_MODIFIER_LIST;
   @Deprecated
-  String WRAPPING_ARRAY_INITIALIZER = CodeStyleSettingsCustomizableOptions.WRAPPING_ARRAY_INITIALIZER.get();
-  @Deprecated
-  String WRAPPING_MODIFIER_LIST = CodeStyleSettingsCustomizableOptions.WRAPPING_MODIFIER_LIST.get();
-  @Deprecated
-  String WRAPPING_ASSERT_STATEMENT = CodeStyleSettingsCustomizableOptions.WRAPPING_ASSERT_STATEMENT.get();
+  @Nls String WRAPPING_ASSERT_STATEMENT = CodeStyleSettingsCustomizableOptions.getInstance().WRAPPING_ASSERT_STATEMENT;
 
   /**
-   * @deprecated use {@link CodeStyleSettingsCustomizableOptions#getWrapOptions()} instead
+   * @deprecated use {@link CodeStyleSettingsCustomizableOptions#WRAP_OPTIONS} instead
    */
   @Deprecated
-  String[] WRAP_OPTIONS = getWrapOptions();
+  @Nls String[] WRAP_OPTIONS = CodeStyleSettingsCustomizableOptions.getInstance().WRAP_OPTIONS;
 
   /**
-   * @deprecated use {@link CodeStyleSettingsCustomizableOptions#getWrapOptionsForSingleton()} instead
+   * @deprecated use {@link CodeStyleSettingsCustomizableOptions#WRAP_OPTIONS_FOR_SINGLETON} instead
    */
-  @Deprecated
-  String[] WRAP_OPTIONS_FOR_SINGLETON = getWrapOptionsForSingleton();
+  @Deprecated @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String[] WRAP_OPTIONS_FOR_SINGLETON = CodeStyleSettingsCustomizableOptions.getInstance().WRAP_OPTIONS_FOR_SINGLETON;
 
   int[] WRAP_VALUES = {CommonCodeStyleSettings.DO_NOT_WRAP,
     CommonCodeStyleSettings.WRAP_AS_NEEDED,
@@ -318,10 +326,10 @@ public interface CodeStyleSettingsCustomizable {
     CommonCodeStyleSettings.WRAP_ALWAYS};
 
   /**
-   * @deprecated use {@link CodeStyleSettingsCustomizableOptions#getBraceOptions()} instead
+   * @deprecated use {@link CodeStyleSettingsCustomizableOptions#BRACE_OPTIONS} instead
    */
-  @Deprecated
-  String[] BRACE_OPTIONS = getBraceOptions();
+  @Deprecated @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String[] BRACE_OPTIONS = CodeStyleSettingsCustomizableOptions.getInstance().BRACE_OPTIONS;
 
   int[] BRACE_VALUES = {
     CommonCodeStyleSettings.DO_NOT_FORCE,
@@ -330,10 +338,11 @@ public interface CodeStyleSettingsCustomizable {
   };
 
   /**
-   * @deprecated use {@link CodeStyleSettingsCustomizableOptions#getBraceReplacementOptions()} instead
+   * @deprecated use {@link CodeStyleSettingsCustomizableOptions#BRACE_PLACEMENT_OPTIONS} instead
    */
   @Deprecated
-  String[] BRACE_PLACEMENT_OPTIONS = getBraceReplacementOptions();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String[] BRACE_PLACEMENT_OPTIONS = CodeStyleSettingsCustomizableOptions.getInstance().BRACE_PLACEMENT_OPTIONS;
 
   int[] BRACE_PLACEMENT_VALUES = {
     CommonCodeStyleSettings.END_OF_LINE,
@@ -344,10 +353,11 @@ public interface CodeStyleSettingsCustomizable {
   };
 
   /**
-   * @deprecated use {@link CodeStyleSettingsCustomizableOptions#getWrapOnTypingOptions()} instead
+   * @deprecated use {@link CodeStyleSettingsCustomizableOptions#WRAP_ON_TYPING_OPTIONS} instead
    */
   @Deprecated
-  String[] WRAP_ON_TYPING_OPTIONS = getWrapOnTypingOptions();
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @Nls String[] WRAP_ON_TYPING_OPTIONS = CodeStyleSettingsCustomizableOptions.getInstance().WRAP_ON_TYPING_OPTIONS;
 
   int[] WRAP_ON_TYPING_VALUES = {
     CommonCodeStyleSettings.WrapOnTyping.NO_WRAP.intValue,
@@ -362,14 +372,14 @@ public interface CodeStyleSettingsCustomizable {
   default void showCustomOption(@NotNull Class<? extends CustomCodeStyleSettings> settingsClass,
                                 @NonNls @NotNull String fieldName,
                                 @NlsContexts.Label @NotNull String title,
-                                @Nls @Nullable String groupName,
+                                @NlsContexts.Label @Nullable String groupName,
                                 Object... options) {
   }
 
   default void showCustomOption(@NotNull Class<? extends CustomCodeStyleSettings> settingsClass,
                                 @NonNls @NotNull String fieldName,
                                 @NlsContexts.Label @NotNull String title,
-                                @Nls @Nullable String groupName,
+                                @NlsContexts.Label @Nullable String groupName,
                                 @Nullable OptionAnchor anchor,
                                 @NonNls @Nullable String anchorFieldName,
                                 Object... options) {
@@ -384,6 +394,6 @@ public interface CodeStyleSettingsCustomizable {
    * @param fieldName The field name of the option to move (as defined in {@code CommonCodeStyleSettings} class).
    * @param newGroup  The new group name (the group may be one of existing ones). A custom group name can be used if supported by consumer.
    */
-  default void moveStandardOption(@NonNls @NotNull String fieldName, @Nls @NotNull String newGroup) {
+  default void moveStandardOption(@NonNls @NotNull String fieldName, @NlsContexts.Label @NotNull String newGroup) {
   }
 }

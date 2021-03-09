@@ -9,13 +9,14 @@ import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.ui.popup.ListItemDescriptorAdapter;
 import com.intellij.openapi.ui.popup.StackingPopupDispatcher;
 import com.intellij.openapi.util.*;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.openapi.wm.WindowManager;
 import com.intellij.ui.*;
 import com.intellij.ui.components.JBList;
+import com.intellij.ui.components.panels.NonOpaquePanel;
 import com.intellij.ui.popup.list.GroupedItemsListRenderer;
 import com.intellij.ui.scale.JBUIScale;
-import com.intellij.util.Function;
 import com.intellij.util.MathUtil;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
@@ -60,7 +61,7 @@ public class ActionGroupPanelWrapper {
     });
 
     list.setBackground(getProjectsBackground());
-    list.setCellRenderer(new GroupedItemsListRenderer<AnAction>(new ListItemDescriptorAdapter<AnAction>() {
+    list.setCellRenderer(new GroupedItemsListRenderer<>(new ListItemDescriptorAdapter<AnAction>() {
                            @Nullable
                            @Override
                            public String getTextFor(AnAction value) {
@@ -119,10 +120,10 @@ public class ActionGroupPanelWrapper {
     boolean singleProjectGenerator = list.getModel().getSize() == 1;
 
     final Ref<Component> selected = Ref.create();
-    final JPanel main = new JPanel(new BorderLayout());
+    final JPanel main = new NonOpaquePanel(new BorderLayout());
     main.add(actionsListPanel, BorderLayout.WEST);
 
-    JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    JPanel bottomPanel = new NonOpaquePanel(new FlowLayout(FlowLayout.RIGHT));
     bottomPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new JBColor(Gray._217, Gray._81)));
     main.add(bottomPanel, BorderLayout.SOUTH);
 
@@ -216,7 +217,7 @@ public class ActionGroupPanelWrapper {
   }
 
   public static void installQuickSearch(JBList<? extends AnAction> list) {
-    new ListSpeedSearch<>(list, (Function<AnAction, String>)o -> {
+    new ListSpeedSearch<>(list, o -> {
       if (o instanceof AbstractActionWithPanel) { //to avoid dependency mess with ProjectSettingsStepBase
         return o.getTemplatePresentation().getText();
       }
@@ -244,7 +245,7 @@ public class ActionGroupPanelWrapper {
     return groups;
   }
 
-  private static String getParentGroupName(@NotNull final AnAction value) {
+  private static @NlsContexts.Separator String getParentGroupName(@NotNull final AnAction value) {
     return (String)value.getTemplatePresentation().getClientProperty(ACTION_GROUP_KEY);
   }
 
@@ -253,13 +254,16 @@ public class ActionGroupPanelWrapper {
   }
 
   public static AnAction wrapGroups(@NotNull AnAction action, @NotNull Disposable parentDisposable) {
-    if (action instanceof ActionGroup && ((ActionGroup)action).isPopup()) {
+    if (!(action instanceof ActionGroup)) return action;
+    if (action instanceof ActionsWithPanelProvider) {
       AtomicReference<Component> createdPanel = new AtomicReference<>();
       final Pair<JPanel, JBList<AnAction>> panel =
         createActionGroupPanel((ActionGroup)action, () -> goBack(createdPanel.get()), parentDisposable);
       createdPanel.set(panel.first);
       final Runnable onDone = () -> {
-        setTitle(action.getTemplateText());
+        if (action.getTemplateText() != null) {
+          setTitle(StringUtil.removeEllipsisSuffix(action.getTemplateText()));
+        }
         final JBList<AnAction> list = panel.second;
         ScrollingUtil.ensureSelectionExists(list);
         final ListSelectionListener[] listeners =
@@ -296,7 +300,7 @@ public class ActionGroupPanelWrapper {
       .detachComponent(parentComponent, null);
   }
 
-  static void setTitle(@Nullable @NlsActions.ActionText String title) {
+  static void setTitle(@Nullable @NlsContexts.DialogTitle String title) {
     JFrame frame = WindowManager.getInstance().findVisibleFrame();
     if (frame != null) {
       frame.setTitle(title);

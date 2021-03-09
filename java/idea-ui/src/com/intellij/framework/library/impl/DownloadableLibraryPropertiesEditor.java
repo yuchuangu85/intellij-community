@@ -37,7 +37,6 @@ import java.util.List;
 
 public class DownloadableLibraryPropertiesEditor extends LibraryPropertiesEditorBase<LibraryVersionProperties, DownloadableLibraryType> {
   private final DownloadableLibraryDescription myDescription;
-  private final DownloadableLibraryType myLibraryType;
   private String myCurrentVersionString;
 
   public DownloadableLibraryPropertiesEditor(DownloadableLibraryDescription description,
@@ -45,14 +44,13 @@ public class DownloadableLibraryPropertiesEditor extends LibraryPropertiesEditor
                                               DownloadableLibraryType libraryType) {
     super(editorComponent, libraryType, JavaUiBundle.message("downloadable.library.properties.change.version.title"));
     myDescription = description;
-    myLibraryType = libraryType;
     myCurrentVersionString = myEditorComponent.getProperties().getVersionString();
   }
 
   @Override
   protected void edit() {
     final ModalityState current = ModalityState.current();
-    myDescription.fetchVersions(new DownloadableFileSetVersions.FileSetVersionsCallback<FrameworkLibraryVersion>() {
+    myDescription.fetchVersions(new DownloadableFileSetVersions.FileSetVersionsCallback<>() {
       @Override
       public void onSuccess(@NotNull final List<? extends FrameworkLibraryVersion> versions) {
         ApplicationManager.getApplication().invokeLater(() -> {

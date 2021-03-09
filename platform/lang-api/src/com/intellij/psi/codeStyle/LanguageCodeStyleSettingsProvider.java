@@ -6,7 +6,6 @@ import com.intellij.application.options.codeStyle.properties.AbstractCodeStylePr
 import com.intellij.application.options.codeStyle.properties.CodeStyleFieldAccessor;
 import com.intellij.application.options.codeStyle.properties.CodeStylePropertyAccessor;
 import com.intellij.application.options.codeStyle.properties.LanguageCodeStylePropertyMapper;
-import com.intellij.lang.IdeLanguageCustomization;
 import com.intellij.lang.Language;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.project.Project;
@@ -17,7 +16,6 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings.IndentOptions;
 import com.intellij.util.containers.ContainerUtil;
-import gnu.trove.THashSet;
 import org.jetbrains.annotations.*;
 
 import java.lang.reflect.Field;
@@ -28,7 +26,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Base class and extension point for common code style settings for a specific language.
  */
-public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSettingsProvider {
+public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSettingsProvider implements LanguageCodeStyleProvider {
   public static final ExtensionPointName<LanguageCodeStyleSettingsProvider> EP_NAME =
     ExtensionPointName.create("com.intellij.langCodeStyleSettingsProvider");
 
@@ -98,6 +96,7 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
    *         use its own language-specific common settings (the settings are shared with other languages).
    * @deprecated Override {@link #customizeDefaults(CommonCodeStyleSettings, IndentOptions)} method instead.
    */
+  @Override
   @SuppressWarnings("DeprecatedIsStillUsed")
   @NotNull
   @Deprecated
@@ -119,16 +118,11 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
   }
 
   /**
-   * @deprecated use PredefinedCodeStyle extension point instead
+   * @deprecated use {@link #getPriority()}
    */
   @Deprecated
-  public PredefinedCodeStyle @NotNull [] getPredefinedCodeStyles() {
-    return PredefinedCodeStyle.EMPTY_ARRAY;
-  }
-
   public DisplayPriority getDisplayPriority() {
-    List<Language> primaryIdeLanguages = IdeLanguageCustomization.getInstance().getPrimaryIdeLanguages();
-    return primaryIdeLanguages.contains(getLanguage()) ? DisplayPriority.KEY_LANGUAGE_SETTINGS : DisplayPriority.LANGUAGE_SETTINGS;
+    return getPriority();
   }
 
   /**
@@ -239,18 +233,12 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
     return null;
   }
 
-  @SuppressWarnings("unused")
-  public static DisplayPriority getDisplayPriority(Language language) {
-    LanguageCodeStyleSettingsProvider langProvider = forLanguage(language);
-    if (langProvider == null) return DisplayPriority.LANGUAGE_SETTINGS;
-    return langProvider.getDisplayPriority();
-  }
-
   @Nullable
   public IndentOptionsEditor getIndentOptionsEditor() {
     return null;
   }
 
+  @Override
   public Set<String> getSupportedFields() {
     return new SupportedFieldCollector().collectFields();
   }
@@ -260,7 +248,7 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
   }
 
   private final class SupportedFieldCollector implements CodeStyleSettingsCustomizable {
-    private final Set<String> myCollectedFields = new THashSet<>();
+    private final Set<String> myCollectedFields = new HashSet<>();
     private SettingsType myCurrSettingsType;
 
     public Set<String> collectFields() {
@@ -341,6 +329,7 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
    * @return {@code DocCommentSettings} wrapper object object which allows to retrieve and modify language's own
    *         settings related to doc comment. The object is used then by common platform doc comment handling algorithms.
    */
+  @Override
   @NotNull
   public DocCommentSettings getDocCommentSettings(@NotNull CodeStyleSettings rootSettings) {
     return DocCommentSettings.DEFAULTS;
@@ -395,7 +384,7 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
     ourSettingsPagesProviders.get().remove(provider);
   }
 
-  private static void registerSettingsPageProvider(@NotNull Set<LanguageCodeStyleSettingsProvider> settingsPagesProviders,
+  private static void registerSettingsPageProvider(@NotNull Set<? super LanguageCodeStyleSettingsProvider> settingsPagesProviders,
                                                    @NotNull LanguageCodeStyleSettingsProvider provider) {
     try {
       Method

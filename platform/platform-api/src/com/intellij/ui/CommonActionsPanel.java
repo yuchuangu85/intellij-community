@@ -3,7 +3,6 @@ package com.intellij.ui;
 
 import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.actionSystem.*;
-import com.intellij.openapi.actionSystem.ex.ActionManagerEx;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.util.NlsContexts;
 import com.intellij.openapi.util.SystemInfo;
@@ -24,7 +23,7 @@ import java.util.function.Supplier;
 /**
  * @author Konstantin Bulenkov
  */
-public class CommonActionsPanel extends JPanel {
+public final class CommonActionsPanel extends JPanel {
   private final ActionToolbarPosition myPosition;
   private final ActionToolbar myToolbar;
 
@@ -104,7 +103,8 @@ public class CommonActionsPanel extends JPanel {
 
   CommonActionsPanel(@NotNull ListenerFactory factory, @Nullable JComponent contextComponent, ActionToolbarPosition position,
                      AnActionButton @Nullable [] additionalActions, @Nullable Comparator<? super AnActionButton> buttonComparator,
-                     String addName, String removeName, String moveUpName, String moveDownName, String editName,
+                     @NlsContexts.Button String addName, @NlsContexts.Button String removeName,
+                     @NlsContexts.Button String moveUpName, @NlsContexts.Button String moveDownName, @NlsContexts.Button String editName,
                      Icon addIcon, Buttons @NotNull ... buttons) {
     super(new BorderLayout());
     myPosition = position;
@@ -144,10 +144,11 @@ public class CommonActionsPanel extends JPanel {
         }
     }
 
-    final ActionManagerEx mgr = (ActionManagerEx)ActionManager.getInstance();
-    myToolbar = mgr.createActionToolbar("ToolbarDecorator",
-                                        new DefaultActionGroup(toolbarActions.toArray(AnAction.EMPTY_ARRAY)),
-                                        position == ActionToolbarPosition.BOTTOM || position == ActionToolbarPosition.TOP);
+    ActionManager actionManager = ActionManager.getInstance();
+    myToolbar = actionManager.createActionToolbar("ToolbarDecorator",
+                                                  new DefaultActionGroup(toolbarActions.toArray(AnAction.EMPTY_ARRAY)),
+                                                  position == ActionToolbarPosition.BOTTOM || position == ActionToolbarPosition.TOP);
+    myToolbar.setTargetComponent(contextComponent);
     myToolbar.getComponent().setBorder(null);
     add(myToolbar.getComponent(), BorderLayout.CENTER);
   }

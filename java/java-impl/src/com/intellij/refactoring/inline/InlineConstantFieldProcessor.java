@@ -24,13 +24,13 @@ import com.intellij.usageView.UsageInfo;
 import com.intellij.usageView.UsageInfoFactory;
 import com.intellij.usageView.UsageViewDescriptor;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
-import java.util.stream.Stream;
 
 /**
  * @author ven
@@ -38,20 +38,21 @@ import java.util.stream.Stream;
 public class InlineConstantFieldProcessor extends BaseRefactoringProcessor {
   private static final Logger LOG = Logger.getInstance(InlineConstantFieldProcessor.class);
   private PsiField myField;
-  private final PsiReferenceExpression myRefExpr;
+  private final PsiElement myRefExpr;
   private final boolean myInlineThisOnly;
   private final boolean mySearchInCommentsAndStrings;
   private final boolean mySearchForTextOccurrences;
   private final boolean myDeleteDeclaration;
+  @SuppressWarnings("LeakableMapKey") //short living refactoring 
   private Map<Language, InlineHandler.Inliner> myInliners;
 
-  public InlineConstantFieldProcessor(PsiField field, Project project, PsiReferenceExpression ref, boolean isInlineThisOnly) {
+  public InlineConstantFieldProcessor(PsiField field, Project project, PsiElement ref, boolean isInlineThisOnly) {
     this(field, project, ref, isInlineThisOnly, false, false, true);
   }
 
   public InlineConstantFieldProcessor(PsiField field,
                                       Project project,
-                                      PsiReferenceExpression ref,
+                                      PsiElement ref,
                                       boolean isInlineThisOnly,
                                       boolean searchInCommentsAndStrings,
                                       boolean searchForTextOccurrences,
@@ -227,16 +228,18 @@ public class InlineConstantFieldProcessor extends BaseRefactoringProcessor {
     initializer.accept(collector);
     HashSet<PsiMember> referencedWithVisibility = collector.myReferencedMembers;
 
-    boolean dependsOnContext = false;
     if (!myField.hasInitializer()) {
+      boolean dependsOnContext;
       PsiMethod[] constructors = Objects.requireNonNull(myField.getContainingClass()).getConstructors();
       if (constructors.length == 1) {
+        Ref<PsiElement> reference = new Ref<>();
         dependsOnContext = !PsiTreeUtil.processElements(initializer, element -> {
-          if (element instanceof PsiReferenceExpression &&
-              ((PsiReferenceExpression)element).getQualifierExpression() == null) {
-            PsiElement resolve = ((PsiReferenceExpression)element).resolve();
-            if (resolve == null ||
-                PsiTreeUtil.isAncestor(constructors[0], resolve, true)) {
+          if (element instanceof PsiJavaCodeReferenceElement) {
+            PsiElement resolve = ((PsiJavaCodeReferenceElement)element).resolve();
+            if (resolve != null &&
+                PsiTreeUtil.isAncestor(constructors[0], resolve, true) && 
+                !PsiTreeUtil.isAncestor(initializer, resolve, true)) {
+              reference.set(resolve);
               return false;
             }
           }
@@ -247,6 +250,7 @@ public class InlineConstantFieldProcessor extends BaseRefactoringProcessor {
             PsiElement element = usageInfo.getElement();
             if (element != null && !PsiTreeUtil.isAncestor(constructors[0], element, true)) {
               conflicts.putValue(element, JavaRefactoringBundle.message("inline.field.initializer.is.not.accessible",
+                                                                        RefactoringUIUtil.getDescription(reference.get(), false),
                                                                         RefactoringUIUtil.getDescription(ConflictsUtil.getContainer(element), true)));
             }
           }
@@ -288,7 +292,7 @@ public class InlineConstantFieldProcessor extends BaseRefactoringProcessor {
           }
         }
         if (element instanceof PsiLiteralExpression &&
-            Stream.of(element.getReferences()).anyMatch(JavaLangClassMemberReference.class::isInstance)) {
+            ContainerUtil.or(element.getReferences(), JavaLangClassMemberReference.class::isInstance)) {
           conflicts.putValue(element, JavaRefactoringBundle.message("inline.field.used.in.reflection"));
         }
       }

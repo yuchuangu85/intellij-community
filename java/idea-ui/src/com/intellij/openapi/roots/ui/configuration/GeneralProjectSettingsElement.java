@@ -30,11 +30,12 @@ import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.roots.ui.configuration.projectRoot.ProjectSdksModel;
 import com.intellij.openapi.roots.ui.configuration.projectRoot.StructureConfigurableContext;
 import com.intellij.openapi.roots.ui.configuration.projectRoot.daemon.*;
+import com.intellij.openapi.util.text.HtmlBuilder;
+import com.intellij.openapi.util.text.HtmlChunk;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.Chunk;
 import com.intellij.util.containers.MultiMap;
 import org.jetbrains.annotations.Nls;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -51,8 +52,8 @@ public class GeneralProjectSettingsElement extends ProjectStructureElement {
   }
 
   @Override
-  public @Nls(capitalization = Nls.Capitalization.Sentence) String getPresentableName() {
-    return ProjectStructureConfigurable.getInstance(myContext.getProject()).getProjectConfig().getProjectName();
+  public String getPresentableName() {
+    return myContext.getModulesConfigurator().getProjectStructureConfigurable().getProjectConfig().getProjectName();
   }
 
   @Override
@@ -63,11 +64,13 @@ public class GeneralProjectSettingsElement extends ProjectStructureElement {
   @Override
   public void check(ProjectStructureProblemsHolder problemsHolder) {
     final Project project = myContext.getProject();
+    ProjectStructureConfigurable projectStructureConfigurable = myContext.getModulesConfigurator().getProjectStructureConfigurable();
     if (containsModuleWithInheritedSdk()) {
-      ProjectSdksModel model = ProjectStructureConfigurable.getInstance(project).getProjectJdksModel();
+      ProjectSdksModel model = projectStructureConfigurable.getProjectJdksModel();
       Sdk sdk = model.getProjectSdk();
       if (sdk == null) {
-        PlaceInProjectStructureBase place = new PlaceInProjectStructureBase(project, ProjectStructureConfigurable.getInstance(project).createProjectConfigurablePlace(), this);
+        PlaceInProjectStructureBase place = new PlaceInProjectStructureBase(project, projectStructureConfigurable
+          .createProjectConfigurablePlace(), this);
         problemsHolder.registerProblem(JavaUiBundle.message("project.roots.project.jdk.problem.message"), null,
                                        ProjectStructureProblemType.error("project-sdk-not-defined"), place,
                                        null);
@@ -77,11 +80,11 @@ public class GeneralProjectSettingsElement extends ProjectStructureElement {
 
     List<Chunk<ModuleSourceSet>> sourceSetCycles = ModuleCompilerUtil.computeSourceSetCycles(myContext.getModulesConfigurator());
 
-    List<String> cycles = new ArrayList<>();
+    List<@Nls String> cycles = new ArrayList<>();
 
     for (Chunk<ModuleSourceSet> chunk : sourceSetCycles) {
       final Set<ModuleSourceSet> sourceSets = chunk.getNodes();
-      List<String> names = new ArrayList<>();
+      List<@Nls String> names = new ArrayList<>();
       for (ModuleSourceSet sourceSet : sourceSets) {
         String name = sourceSet.getDisplayName();
         names.add(names.isEmpty() ? name : StringUtil.decapitalize(name));
@@ -90,21 +93,30 @@ public class GeneralProjectSettingsElement extends ProjectStructureElement {
     }
     if (!cycles.isEmpty()) {
       final PlaceInProjectStructureBase place =
-        new PlaceInProjectStructureBase(project, ProjectStructureConfigurable.getInstance(project).createModulesPlace(), this);
+        new PlaceInProjectStructureBase(project, projectStructureConfigurable.createModulesPlace(), this);
       final String message;
-      final String description;
+      final HtmlChunk description;
       if (cycles.size() > 1) {
         message = JavaUiBundle.message("circular.dependencies.message");
-        @NonNls final String br = "<br>&nbsp;&nbsp;&nbsp;&nbsp;";
-        StringBuilder cyclesString = new StringBuilder();
-        for (int i = 0; i < cycles.size(); i++) {
-          cyclesString.append(br).append(i + 1).append(". ").append(cycles.get(i));
-        }
-        description = JavaUiBundle.message("module.circular.dependency.warning.description", cyclesString);
+
+        final String header = JavaUiBundle.message("module.circular.dependency.warning.description");
+
+        final HtmlChunk[] liTags = cycles.stream()
+          .map(c -> HtmlChunk.tag("li").addText(c))
+          .toArray(HtmlChunk[]::new);
+
+        final HtmlChunk.Element ol = HtmlChunk.tag("ol").style("padding-left: 30pt;")
+          .children(liTags);
+
+        description = new HtmlBuilder()
+          .append(HtmlChunk.tag("b").addText(header))
+          .append(ol)
+          .toFragment()
+        ;
       }
       else {
         message = JavaUiBundle.message("module.circular.dependency.warning.short", StringUtil.decapitalize(cycles.get(0)));
-        description = null;
+        description = HtmlChunk.empty();
       }
       problemsHolder.registerProblem(new ProjectStructureProblemDescription(message, description, place,
                                                                             ProjectStructureProblemType
@@ -153,7 +165,8 @@ public class GeneralProjectSettingsElement extends ProjectStructureElement {
     for (String libraryName : BuildProcessCustomPluginsConfiguration.getInstance(myContext.getProject()).getProjectLibraries()) {
       Library library = myContext.getProjectLibrariesProvider().getModifiableModel().getLibraryByName(libraryName);
       if (library != null) {
-        usages.add(new UsageInProjectSettings(myContext, new LibraryProjectStructureElement(myContext, library), "Build process configuration"));
+        usages.add(new UsageInProjectSettings(myContext, new LibraryProjectStructureElement(myContext, library),
+                                              JavaUiBundle.message("label.build.process.configuration")));
       }
     }
 

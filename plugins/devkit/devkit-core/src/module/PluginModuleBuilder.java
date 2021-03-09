@@ -46,7 +46,7 @@ public class PluginModuleBuilder extends JavaModuleBuilder {
     String contentEntryPath = getContentEntryPath();
     if (contentEntryPath == null) return;
 
-    String resourceRootPath = contentEntryPath + "/resources";
+    String resourceRootPath = contentEntryPath + "/resources"; //NON-NLS
     VirtualFile contentRoot = LocalFileSystem.getInstance().findFileByPath(contentEntryPath);
     if (contentRoot == null) return;
 
@@ -55,7 +55,7 @@ public class PluginModuleBuilder extends JavaModuleBuilder {
       contentEntry.addSourceFolder(VfsUtilCore.pathToUrl(resourceRootPath), JavaResourceRootType.RESOURCE);
     }
 
-    final String defaultPluginXMLLocation = resourceRootPath + "/META-INF/plugin.xml";
+    final String defaultPluginXMLLocation = resourceRootPath + "/" + PluginDescriptorConstants.PLUGIN_XML_PATH;
     final Module module = rootModel.getModule();
     final Project project = module.getProject();
     StartupManager.getInstance(project).runWhenProjectIsInitialized(() -> {
@@ -109,7 +109,7 @@ public class PluginModuleBuilder extends JavaModuleBuilder {
     final BorderLayoutPanel panel = JBUI.Panels.simplePanel(0, 4);
     final HyperlinkLabel linkLabel = new HyperlinkLabel();
     linkLabel.setHtmlText(DevKitBundle.message("module.wizard.devkit.simple.plugin.label"));
-    linkLabel.setHyperlinkTarget("https://www.jetbrains.org/intellij/sdk/docs/basics/getting_started.html");
+    linkLabel.setHyperlinkTarget("https://plugins.jetbrains.com/docs/intellij/getting-started.html?from=DevkitPluginModuleWizard");
     panel.addToCenter(linkLabel);
 
     final JComponent component = step.getComponent();

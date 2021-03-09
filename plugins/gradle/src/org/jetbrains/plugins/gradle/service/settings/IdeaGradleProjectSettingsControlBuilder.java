@@ -43,6 +43,7 @@ import com.intellij.xml.util.XmlStringUtil;
 import one.util.streamex.StreamEx;
 import org.gradle.util.GradleVersion;
 import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.gradle.service.GradleInstallationManager;
@@ -149,14 +150,6 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     return this;
   }
 
-  /**
-   * @deprecated Use {@link #dropUseLocalDistributionButton()} instead
-   */
-  @Deprecated
-  public IdeaGradleProjectSettingsControlBuilder dropGradleHomePathComponents() {
-    return this;
-  }
-
   public IdeaGradleProjectSettingsControlBuilder dropCustomizableWrapperButton() {
     dropCustomizableWrapperButton = true;
     return this;
@@ -181,11 +174,6 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     return this;
   }
 
-  @Deprecated
-  public IdeaGradleProjectSettingsControlBuilder dropCreateEmptyContentRootDirectoriesBox() {
-    return this;
-  }
-
   public IdeaGradleProjectSettingsControlBuilder dropResolveModulePerSourceSetCheckBox() {
     dropResolveModulePerSourceSetCheckBox = true;
     return this;
@@ -193,19 +181,6 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
 
   public IdeaGradleProjectSettingsControlBuilder dropResolveExternalAnnotationsCheckBox() {
     dropResolveExternalAnnotationsCheckBox = true;
-    return this;
-  }
-
-  /**
-   * @deprecated Use {@link IdeaGradleSystemSettingsControlBuilder#dropStoreExternallyCheckBox}
-   */
-  @Deprecated
-  public IdeaGradleProjectSettingsControlBuilder dropStoreExternallyCheckBox() {
-    return this;
-  }
-
-  @Deprecated
-  public IdeaGradleProjectSettingsControlBuilder dropModulesGroupingOptionPanel() {
     return this;
   }
 
@@ -319,7 +294,7 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
   }
 
   private void addGradleComponents(PaintAwarePanel content, int indentLevel) {
-    myGradlePanel = addComponentsGroup("Gradle", content, indentLevel, panel -> {
+    myGradlePanel = addComponentsGroup(GradleConstants.GRADLE_NAME, content, indentLevel, panel -> { //NON-NLS GRADLE_NAME
       addGradleChooserComponents(panel, indentLevel + 1);
       addGradleJdkComponents(panel, indentLevel + 1);
     });
@@ -840,7 +815,7 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     myProjectRef.set(project);
   }
 
-  private static JPanel addComponentsGroup(@Nullable String title,
+  private static JPanel addComponentsGroup(@Nullable @NlsContexts.Separator String title,
                                            PaintAwarePanel content,
                                            int indentLevel,
                                            @NotNull Consumer<JPanel> configuration) {
@@ -912,6 +887,7 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     }
   }
 
+  @NlsSafe
   static String getIDEName() {
     return ApplicationNamesInfo.getInstance().getFullProductName();
   }
@@ -936,7 +912,7 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
 
     @NotNull
     private static SimpleTextAttributes getTextAttributes(boolean selected) {
-      return selected && !(SystemInfo.isWinVistaOrNewer && UIManager.getLookAndFeel().getName().contains("Windows"))
+      return selected && !(SystemInfoRt.isWindows && UIManager.getLookAndFeel().getName().contains("Windows"))
              ? SimpleTextAttributes.SELECTED_SIMPLE_CELL_ATTRIBUTES
              : SimpleTextAttributes.SIMPLE_CELL_ATTRIBUTES;
     }
@@ -979,7 +955,7 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
 
   private class DelayedBalloonInfo implements Runnable {
     private final MessageType myMessageType;
-    private final String myText;
+    private final @Nls String myText;
     private final long myTriggerTime;
 
     DelayedBalloonInfo(@NotNull MessageType messageType, @NotNull LocationSettingType settingType, long delayMillis) {
@@ -1021,15 +997,16 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     }
 
     @NotNull
+    @NlsContexts.ListItem
     private String getText(@Nullable Boolean state) {
       if (state == Boolean.TRUE) {
-        return "Gradle";
+        return GradleConstants.GRADLE_NAME; //NON-NLS GRADLE_NAME
       }
       if (state == Boolean.FALSE) {
         return getIDEName();
       }
       LOG.error("Unexpected: " + state);
-      return "Unexpected: " + state;
+      return GradleBundle.message("gradle.settings.text.unexpected", state);
     }
   }
 
@@ -1052,9 +1029,10 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     }
 
     @NotNull
+    @NlsContexts.ListItem
     private String getText(@Nullable TestRunner runner) {
       if (runner == TestRunner.GRADLE) {
-        return "Gradle";
+        return GradleConstants.GRADLE_NAME;  //NON-NLS GRADLE_NAME
       }
       if (runner == TestRunner.PLATFORM) {
         return getIDEName();
@@ -1063,7 +1041,7 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
         return GradleBundle.message("gradle.settings.text.build.run.per.test");
       }
       LOG.error("Unexpected: " + runner);
-      return "Unexpected: " + runner;
+      return GradleBundle.message("gradle.settings.text.unexpected", runner);
     }
   }
 
@@ -1084,6 +1062,7 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
     }
 
     @NotNull
+    @NlsContexts.ListItem
     private String getText(@Nullable DistributionType value) {
       if (value != null) {
         switch (value) {
@@ -1098,7 +1077,7 @@ public class IdeaGradleProjectSettingsControlBuilder implements GradleProjectSet
         }
       }
       LOG.error("Unexpected: " + value);
-      return "Unexpected: " + value;
+      return GradleBundle.message("gradle.settings.text.unexpected", value);
     }
   }
 }

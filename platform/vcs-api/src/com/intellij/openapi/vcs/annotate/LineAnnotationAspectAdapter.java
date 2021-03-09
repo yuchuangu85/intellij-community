@@ -3,7 +3,9 @@ package com.intellij.openapi.vcs.annotate;
 
 import com.intellij.openapi.editor.EditorGutterAction;
 import com.intellij.openapi.util.NlsContexts;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
 
@@ -11,19 +13,45 @@ import java.awt.*;
  * @author Konstantin Bulenkov
  */
 public abstract class LineAnnotationAspectAdapter implements LineAnnotationAspect, EditorGutterAction {
-  private final String myId;
+  @Nullable private final String myId;
+  @NlsContexts.ListItem @Nullable private final String myDisplayName;
   private final boolean myShowByDefault;
 
+  /**
+   * @deprecated use {@link LineAnnotationAspectAdapter#LineAnnotationAspectAdapter(String, String, boolean)}
+   */
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
   protected LineAnnotationAspectAdapter() {
-    this(null, false);
+    this(null, null, false);
   }
 
-  protected LineAnnotationAspectAdapter(String id) {
-    this(id, false);
+  /**
+   * @deprecated use {@link LineAnnotationAspectAdapter#LineAnnotationAspectAdapter(String, String)}
+   */
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  protected LineAnnotationAspectAdapter(@Nullable String id) {
+    this(id, null, false);
   }
 
-  public LineAnnotationAspectAdapter(String id, boolean showByDefault) {
+  protected LineAnnotationAspectAdapter(@Nullable String id, @NlsContexts.ListItem @Nullable String displayName) {
+    this(id, displayName, false);
+  }
+
+  /**
+   * @deprecated use {@link LineAnnotationAspectAdapter#LineAnnotationAspectAdapter(String, String, boolean)}
+   */
+  @Deprecated
+  public LineAnnotationAspectAdapter(@NonNls @Nullable String id, boolean showByDefault) {
+    this(id, null, showByDefault);
+  }
+
+  public LineAnnotationAspectAdapter(@NonNls @Nullable String id,
+                                     @NlsContexts.ListItem @Nullable String displayName,
+                                     boolean showByDefault) {
     myId = id;
+    myDisplayName = displayName;
     myShowByDefault = showByDefault;
   }
 
@@ -34,9 +62,13 @@ public abstract class LineAnnotationAspectAdapter implements LineAnnotationAspec
   }
 
   @Override
-  @NonNls
-  public String getId() {
+  public @NonNls @Nullable String getId() {
     return myId;
+  }
+
+  @Override
+  public @NlsContexts.ListItem @Nullable String getDisplayName() {
+    return myDisplayName != null ? myDisplayName : myId; //NON-NLS backward compatibility
   }
 
   @Override

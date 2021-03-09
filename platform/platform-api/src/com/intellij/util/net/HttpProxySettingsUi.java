@@ -1,10 +1,15 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.net;
 
 import com.google.common.net.HostAndPort;
 import com.google.common.net.InetAddresses;
 import com.google.common.net.InternetDomainName;
 import com.intellij.ide.IdeBundle;
+import com.intellij.notification.Notification;
+import com.intellij.notification.NotificationType;
+import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.options.ConfigurableUi;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.progress.ProgressManager;
@@ -16,6 +21,7 @@ import com.intellij.ui.PortField;
 import com.intellij.ui.RawCommandLineEditor;
 import com.intellij.ui.RelativeFont;
 import com.intellij.ui.components.JBRadioButton;
+import com.intellij.ui.jcef.JBCefApp;
 import com.intellij.util.io.HttpRequests;
 import com.intellij.util.proxy.CommonProxy;
 import com.intellij.util.proxy.JavaProxyProperty;
@@ -217,21 +223,21 @@ class HttpProxySettingsUi implements ConfigurableUi<HttpConfigurable> {
 
   @NotNull
   private static @NlsContexts.DialogMessage String errorText(@NotNull String s) {
-    return "Problem with connection: " + s;
+    return IdeBundle.message("dialog.message.problem.with.connection", s);
   }
 
   @Nullable
-  private String isValid() {
+  private @NlsContexts.DialogMessage String isValid() {
     if (myUseHTTPProxyRb.isSelected()) {
       String host = getText(myProxyHostTextField);
       if (host == null) {
-        return "Host name is empty";
+        return IdeBundle.message("dialog.message.host.name.empty");
       }
 
       try {
         HostAndPort parsedHost = HostAndPort.fromString(host);
         if (parsedHost.hasPort()) {
-          return "Invalid host value";
+          return IdeBundle.message("dialog.message.invalid.host.value");
         }
         host = parsedHost.getHost();
 
@@ -246,15 +252,15 @@ class HttpProxySettingsUi implements ConfigurableUi<HttpConfigurable> {
         InternetDomainName.from(host);
       }
       catch (IllegalArgumentException e) {
-        return "Invalid host value";
+        return IdeBundle.message("dialog.message.invalid.host.value");
       }
 
       if (myProxyAuthCheckBox.isSelected()) {
         if (StringUtil.isEmptyOrSpaces(myProxyLoginTextField.getText())) {
-          return "Login is empty";
+          return IdeBundle.message("dialog.message.login.empty");
         }
         if (myProxyPasswordTextField.getPassword().length == 0) {
-          return "Password is empty";
+          return IdeBundle.message("dialog.message.password.empty");
         }
       }
     }
@@ -268,7 +274,8 @@ class HttpProxySettingsUi implements ConfigurableUi<HttpConfigurable> {
       throw new ConfigurationException(error);
     }
 
-    if (isModified(settings)) {
+    boolean modified = isModified(settings);
+    if (modified) {
       settings.AUTHENTICATION_CANCELLED = false;
     }
 
@@ -286,6 +293,19 @@ class HttpProxySettingsUi implements ConfigurableUi<HttpConfigurable> {
 
     settings.PROXY_PORT = myProxyPortTextField.getNumber();
     settings.PROXY_HOST = getText(myProxyHostTextField);
+
+    if (modified && JBCefApp.isStarted()) {
+      Notification notification = JBCefApp.NOTIFICATION_GROUP.getValue().createNotification(IdeBundle.message("notification.title.jcef.proxyChanged"),
+                                                           IdeBundle.message("notification.content.jcef.applySettings"),
+                                                           NotificationType.WARNING, null);
+      notification.addAction(new AnAction(IdeBundle.message("action.jcef.restart")) {
+        @Override
+        public void actionPerformed(@NotNull AnActionEvent e) {
+          ApplicationManager.getApplication().restart();
+        }
+      });
+      notification.notify(null);
+    }
   }
 
   @Nullable

@@ -19,13 +19,11 @@ import java.util.*;
 
 class StubCumulativeInputDiffBuilder extends DirectInputDataDiffBuilder<Integer, SerializedStubTree> {
   private static final Logger LOG = Logger.getInstance(SerializedStubTree.class);
-  private final int myInputId;
   @Nullable
   private final SerializedStubTree myCurrentTree;
 
   StubCumulativeInputDiffBuilder(int inputId, @Nullable SerializedStubTree currentTree) {
     super(inputId);
-    myInputId = inputId;
     myCurrentTree = currentTree;
   }
 
@@ -48,6 +46,11 @@ class StubCumulativeInputDiffBuilder extends DirectInputDataDiffBuilder<Integer,
       updateStubIndices(null);
     }
     return true;
+  }
+
+  @Nullable
+  SerializedStubTree getSerializedStubTree() {
+    return myCurrentTree;
   }
 
   @Override
@@ -85,7 +88,7 @@ class StubCumulativeInputDiffBuilder extends DirectInputDataDiffBuilder<Integer,
 
       if (FileBasedIndexImpl.DO_TRACE_STUB_INDEX_UPDATE) {
         StubIndexImpl.LOG
-          .info("stub indexes" + (newTree == null ? "deletion" : "update") + ": file = " + myInputId + " indexes " + affectedIndexes);
+          .info("stub indexes " + (newTree == null ? "deletion" : "update") + ": file = " + myInputId + " indexes " + affectedIndexes);
       }
 
       StubIndexImpl stubIndex = (StubIndexImpl)StubIndex.getInstance();

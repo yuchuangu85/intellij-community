@@ -32,19 +32,20 @@ import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.openapi.util.NlsSafe;
 import com.intellij.openapi.util.text.HtmlChunk;
-import com.intellij.openapi.util.NlsContexts;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.ChangesUtil;
 import com.intellij.openapi.vcs.changes.ui.SimpleChangesBrowser;
 import com.intellij.openapi.vcs.ui.ReplaceFileConfirmationDialog;
 import com.intellij.ui.HyperlinkAdapter;
+import com.intellij.util.concurrency.annotations.RequiresEdt;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.xml.util.XmlStringUtil;
-import org.jetbrains.annotations.CalledInAwt;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -78,7 +79,7 @@ public class CompareBranchesDiffPanel extends JPanel {
 
     myLabel = new JEditorPane() {
       @Override
-      public void setText(String t) {
+      public void setText(@Nls String t) {
         super.setText(t);
         getPreferredSize();
       }
@@ -105,7 +106,7 @@ public class CompareBranchesDiffPanel extends JPanel {
     add(myChangesBrowser, BorderLayout.CENTER);
   }
 
-  @CalledInAwt
+  @RequiresEdt
   public void setCompareInfo(@NotNull CommitCompareInfo compareInfo) {
     myCompareInfo = compareInfo;
     refreshView();

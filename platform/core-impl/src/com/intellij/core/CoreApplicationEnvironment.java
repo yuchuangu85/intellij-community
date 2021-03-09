@@ -1,6 +1,7 @@
 // Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.core;
 
+import com.intellij.DynamicBundle;
 import com.intellij.codeInsight.folding.CodeFoldingSettings;
 import com.intellij.concurrency.Job;
 import com.intellij.concurrency.JobLauncher;
@@ -46,6 +47,7 @@ import com.intellij.util.KeyedLazyInstanceEP;
 import com.intellij.util.Processor;
 import com.intellij.util.graph.GraphAlgorithms;
 import com.intellij.util.graph.impl.GraphAlgorithmsImpl;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.picocontainer.MutablePicoContainer;
@@ -78,7 +80,7 @@ public class CoreApplicationEnvironment {
     myParentDisposable = parentDisposable;
     myUnitTestMode = unitTestMode;
 
-    DisabledPluginsState.dontLoadDisabledPlugins();
+    DisabledPluginsState.setIgnoreDisabledPlugins(true);
 
     myFileTypeRegistry = new CoreFileTypeRegistry();
 
@@ -90,9 +92,7 @@ public class CoreApplicationEnvironment {
     myJarFileSystem = createJarFileSystem();
     myJrtFileSystem = createJrtFileSystem();
 
-    registerApplicationService(FileDocumentManager.class, new MockFileDocumentManagerImpl(charSequence -> {
-      return new DocumentImpl(charSequence);
-    }, null));
+    registerApplicationService(FileDocumentManager.class, new MockFileDocumentManagerImpl(null, DocumentImpl::new));
 
     registerApplicationExtensionPoint(new ExtensionPointName<>("com.intellij.virtualFileManagerListener"), VirtualFileManagerListener.class);
     List<VirtualFileSystem> fs = myJrtFileSystem != null
@@ -117,6 +117,8 @@ public class CoreApplicationEnvironment {
     registerApplicationService(GraphAlgorithms.class, new GraphAlgorithmsImpl());
 
     myApplication.registerService(ApplicationInfo.class, ApplicationInfoImpl.class);
+
+    registerApplicationExtensionPoint(DynamicBundle.LanguageBundleEP.EP_NAME, DynamicBundle.LanguageBundleEP.class);
   }
 
   public <T> void registerApplicationService(@NotNull Class<T> serviceInterface, @NotNull T serviceImplementation) {
@@ -203,7 +205,7 @@ public class CoreApplicationEnvironment {
     }
   }
 
-  public void registerFileType(@NotNull FileType fileType, @NotNull String extension) {
+  public void registerFileType(@NotNull FileType fileType, @NotNull @NonNls String extension) {
     myFileTypeRegistry.registerFileType(fileType, extension);
   }
 

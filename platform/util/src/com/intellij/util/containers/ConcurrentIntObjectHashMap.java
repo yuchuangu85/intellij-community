@@ -1,22 +1,8 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.util.containers;
 
-import com.intellij.util.concurrency.AtomicFieldUpdater;
+import com.intellij.util.ReflectionUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.invoke.MethodHandle;
@@ -34,9 +20,10 @@ import java.util.concurrent.locks.LockSupport;
  * - Null values are NOT allowed
  * @author Doug Lea
  * @param <V> the type of mapped values
- * Use {@link ContainerUtil#createConcurrentIntObjectMap()} to create this map
+ * @deprecated Use {@link com.intellij.concurrency.ConcurrentCollectionFactory#createConcurrentIntObjectMap()} instead
  */
-class ConcurrentIntObjectHashMap<V> implements ConcurrentIntObjectMap<V> {
+@Deprecated
+final class ConcurrentIntObjectHashMap<V> implements ConcurrentIntObjectMap<V> {
   /**
    * The largest possible table capacity.  This value must be
    * exactly 1<<30 to stay within Java array allocation and indexing
@@ -419,7 +406,7 @@ class ConcurrentIntObjectHashMap<V> implements ConcurrentIntObjectMap<V> {
    *                                  nonpositive
    */
   ConcurrentIntObjectHashMap(int initialCapacity,
-                                     float loadFactor, int concurrencyLevel) {
+                             float loadFactor, int concurrencyLevel) {
     if (!(loadFactor > 0.0f) || initialCapacity < 0 || concurrencyLevel <= 0) {
       throw new IllegalArgumentException();
     }
@@ -953,7 +940,7 @@ class ConcurrentIntObjectHashMap<V> implements ConcurrentIntObjectMap<V> {
    * Legacy method testing if some key maps into the specified value
    * in this table.  This method is identical in functionality to
    * {@link #containsValue(Object)}, and exists solely to ensure
-   * full compatibility with class {@link java.util.Hashtable},
+   * full compatibility with class {@link Hashtable},
    * which supported this method prior to introduction of the
    * Java Collections framework.
    *
@@ -2205,7 +2192,7 @@ class ConcurrentIntObjectHashMap<V> implements ConcurrentIntObjectMap<V> {
 
     static {
       try {
-        Object unsafe = AtomicFieldUpdater.getUnsafe();
+        Object unsafe = ReflectionUtil.getUnsafe();
         MethodHandles.Lookup publicLookup = MethodHandles.publicLookup();
         MethodHandle objectFieldOffset =
           publicLookup.findVirtual(unsafe.getClass(), "objectFieldOffset", MethodType.methodType(long.class, Field.class));
@@ -2784,7 +2771,7 @@ class ConcurrentIntObjectHashMap<V> implements ConcurrentIntObjectMap<V> {
   static {
     try {
       MethodHandles.Lookup publicLookup = MethodHandles.publicLookup();
-      Object unsafe = AtomicFieldUpdater.getUnsafe();
+      Object unsafe = ReflectionUtil.getUnsafe();
       MethodHandle objectFieldOffset = publicLookup.findVirtual(unsafe.getClass(), "objectFieldOffset", MethodType.methodType(long.class, Field.class));
       Class<?> k = ConcurrentIntObjectHashMap.class;
       SIZECTL = (long) objectFieldOffset.invoke(unsafe, k.getDeclaredField("sizeCtl"));

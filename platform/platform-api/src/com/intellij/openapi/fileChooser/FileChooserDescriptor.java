@@ -8,6 +8,7 @@ import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Iconable;
 import com.intellij.openapi.util.NlsContexts;
+import com.intellij.openapi.util.NlsSafe;
 import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.VFileProperty;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -269,11 +270,10 @@ public class FileChooserDescriptor implements Cloneable {
   }
 
   public String getName(final VirtualFile file) {
-    return file.getPath();
+    return file.getPresentableName();
   }
 
-  @Nullable
-  public String getComment(final VirtualFile file) {
+  public @NlsSafe @Nullable String getComment(final VirtualFile file) {
     return null;
   }
 

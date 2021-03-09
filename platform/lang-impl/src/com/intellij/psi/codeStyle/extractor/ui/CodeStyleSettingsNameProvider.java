@@ -36,7 +36,7 @@ public class CodeStyleSettingsNameProvider implements CodeStyleSettingsCustomiza
   }
 
   protected void addSetting(@NotNull SettingsGroup group, @NotNull CodeStyleSettingPresentation setting, @Nullable OptionAnchor anchor,
-                            @Nullable String anchorFieldName) {
+                            @Nullable @Nls String anchorFieldName) {
     for (Map.Entry<SettingsType, Map<SettingsGroup, List<CodeStyleSettingPresentation>>> entry: mySettings.entrySet()) {
       if (entry.getValue().containsKey(group)) {
         addSetting(entry.getKey(), group, setting, anchor, anchorFieldName);
@@ -47,7 +47,7 @@ public class CodeStyleSettingsNameProvider implements CodeStyleSettingsCustomiza
   }
 
   protected void addSetting(@NotNull SettingsType settingsType, @NotNull SettingsGroup group, @NotNull CodeStyleSettingPresentation setting,
-                            @Nullable OptionAnchor anchor, @Nullable String anchorFieldName) {
+                            @Nullable OptionAnchor anchor, @Nullable @Nls String anchorFieldName) {
     Map<CodeStyleSettingPresentation.SettingsGroup, List<CodeStyleSettingPresentation>> groups = mySettings.get(settingsType);
     if (groups == null) {
       groups = new LinkedHashMap<>();
@@ -122,7 +122,7 @@ public class CodeStyleSettingsNameProvider implements CodeStyleSettingsCustomiza
                                @NlsContexts.Label @NotNull String title,
                                @Nls @Nullable String groupName,
                                @Nullable OptionAnchor anchor,
-                               @NonNls @Nullable String anchorFieldName,
+                               @Nls @Nullable String anchorFieldName,
                                Object... options) {
     if (options.length == 2) {
       addSetting(new SettingsGroup(groupName), new CodeStyleSelectSettingPresentation(fieldName, title, (int[])options[1],
@@ -174,13 +174,13 @@ public class CodeStyleSettingsNameProvider implements CodeStyleSettingsCustomiza
     }
   }
 
-  public static String getSettingsTypeName(LanguageCodeStyleSettingsProvider.SettingsType settingsType) {
+  public static @Nls String getSettingsTypeName(LanguageCodeStyleSettingsProvider.SettingsType settingsType) {
     switch (settingsType) {
       case BLANK_LINES_SETTINGS: return ApplicationBundle.message("title.blank.lines");
       case SPACING_SETTINGS: return ApplicationBundle.message("title.spaces");
       case WRAPPING_AND_BRACES_SETTINGS: return ApplicationBundle.message("settings.code.style.tab.title.wrapping.and.braces");
       case INDENT_SETTINGS: return ApplicationBundle.message("title.tabs.and.indents");
-      case LANGUAGE_SPECIFIC: return "Language-specific"; //TODO should load from ApplciationBundle here
+      case LANGUAGE_SPECIFIC: return ApplicationBundle.message("code.style.title.lang.specific");
       default: throw new IllegalArgumentException("Unknown settings type: " + settingsType);
     }
   }

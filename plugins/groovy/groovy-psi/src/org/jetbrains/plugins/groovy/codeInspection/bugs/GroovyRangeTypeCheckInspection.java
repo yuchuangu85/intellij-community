@@ -3,13 +3,17 @@ package org.jetbrains.plugins.groovy.codeInspection.bugs;
 
 import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.NlsSafe;
 import com.intellij.psi.*;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.GroovyBundle;
-import org.jetbrains.plugins.groovy.codeInspection.*;
+import org.jetbrains.plugins.groovy.codeInspection.BaseInspection;
+import org.jetbrains.plugins.groovy.codeInspection.BaseInspectionVisitor;
+import org.jetbrains.plugins.groovy.codeInspection.GroovyFix;
+import org.jetbrains.plugins.groovy.codeInspection.GroovyQuickFixFactory;
 import org.jetbrains.plugins.groovy.lang.psi.api.GrRangeExpression;
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.GrTypeDefinition;
@@ -70,7 +74,7 @@ public class GroovyRangeTypeCheckInspection extends BaseInspection {
         @NotNull
         @Override
         public String getName() {
-          return GroovyInspectionBundle.message("fix.class", psiClass.getName());
+          return GroovyBundle.message("fix.class", psiClass.getName());
         }
 
         @Nls
@@ -99,15 +103,18 @@ public class GroovyRangeTypeCheckInspection extends BaseInspection {
   protected String buildErrorString(Object... args) {
     switch (args.length) {
       case 1:
-        return GroovyInspectionBundle.message("type.doesnt.implement.comparable", args);
+        return GroovyBundle.message("type.doesnt.implement.comparable", args);
       case 2:
-        return GroovyInspectionBundle.message("type.doesnt.contain.method", args);
+        return GroovyBundle.message("type.doesnt.contain.method", args);
       default:
         throw new IncorrectOperationException("incorrect args:" + Arrays.toString(args));
     }
   }
 
   private static class MyVisitor extends BaseInspectionVisitor {
+    @NlsSafe private static final String CALL_NEXT = "next()";
+    @NlsSafe private static final String CALL_PREVIOUS = "previous()";
+
     @Override
     public void visitRangeExpression(@NotNull GrRangeExpression range) {
       super.visitRangeExpression(range);
@@ -119,10 +126,10 @@ public class GroovyRangeTypeCheckInspection extends BaseInspection {
       final GroovyResolveResult[] nexts = ResolveUtil.getMethodCandidates(iterationType, "next", range, PsiType.EMPTY_ARRAY);
       final GroovyResolveResult[] previouses = ResolveUtil.getMethodCandidates(iterationType, "previous", range, PsiType.EMPTY_ARRAY);
       if (nexts.length == 0) {
-        registerError(range, iterationType.getPresentableText(), "next()");
+        registerError(range, iterationType.getPresentableText(), CALL_NEXT);
       }
       if (previouses.length == 0) {
-        registerError(range, iterationType.getPresentableText(), "previous()");
+        registerError(range, iterationType.getPresentableText(), CALL_PREVIOUS);
       }
 
       if (!InheritanceUtil.isInheritor(iterationType, CommonClassNames.JAVA_LANG_COMPARABLE)) {

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.packaging.artifacts;
 
 import com.intellij.openapi.extensions.ExtensionPointName;
@@ -9,21 +9,29 @@ import com.intellij.packaging.elements.PackagingElementOutputKind;
 import com.intellij.packaging.elements.PackagingElementResolvingContext;
 import com.intellij.packaging.ui.ArtifactProblemsHolder;
 import com.intellij.packaging.ui.PackagingSourceItem;
-import org.jetbrains.annotations.Nls;
-import org.jetbrains.annotations.NonNls;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.*;
 
 import javax.swing.*;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Supplier;
 
 public abstract class ArtifactType {
-  public static final ExtensionPointName<ArtifactType> EP_NAME = ExtensionPointName.create("com.intellij.packaging.artifactType");
+  public static final ExtensionPointName<ArtifactType> EP_NAME = new ExtensionPointName<>("com.intellij.packaging.artifactType");
   private final String myId;
-  private final @Nls(capitalization = Nls.Capitalization.Sentence) String myTitle;
+  private final Supplier<@Nls(capitalization = Nls.Capitalization.Sentence) String> myTitle;
 
+  /**
+   * @deprecated This constructor is meant to provide the binary compatibility with the external plugins.
+   * Please use the constructor that accepts a messagePointer for {@link ArtifactType#myTitle}
+   */
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
   protected ArtifactType(@NonNls String id, @Nls(capitalization = Nls.Capitalization.Sentence) String title) {
+    this(id, () -> title);
+  }
+
+  protected ArtifactType(@NonNls String id, Supplier<@Nls(capitalization = Nls.Capitalization.Sentence) String> title) {
     myId = id;
     myTitle = title;
   }
@@ -33,7 +41,7 @@ public abstract class ArtifactType {
   }
 
   public @Nls(capitalization = Nls.Capitalization.Sentence) String getPresentableName() {
-    return myTitle;
+    return myTitle.get();
   }
 
   @NotNull
@@ -51,13 +59,12 @@ public abstract class ArtifactType {
     return true;
   }
 
-  public static ArtifactType[] getAllTypes() {
-    return EP_NAME.getExtensions();
+  public static @NotNull List<ArtifactType> getAllTypes() {
+    return EP_NAME.getExtensionList();
   }
 
-  @Nullable
-  public static ArtifactType findById(@NotNull @NonNls String id) {
-    for (ArtifactType type : getAllTypes()) {
+  public static @Nullable ArtifactType findById(@NotNull @NonNls String id) {
+    for (ArtifactType type : EP_NAME.getIterable()) {
       if (id.equals(type.getId())) {
         return type;
       }

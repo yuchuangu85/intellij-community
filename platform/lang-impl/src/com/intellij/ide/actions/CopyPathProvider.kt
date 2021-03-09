@@ -8,6 +8,7 @@ import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.ide.CopyPasteManager
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootManager
@@ -22,11 +23,6 @@ import java.awt.datatransfer.StringSelection
 
 abstract class CopyPathProvider : DumbAwareAction() {
   override fun update(e: AnActionEvent) {
-    if (!CopyPathsAction.isCopyReferencePopupAvailable()) {
-      e.presentation.isEnabledAndVisible = false
-      return
-    }
-
     val dataContext = e.dataContext
     val editor = CommonDataKeys.EDITOR.getData(dataContext)
     val project = e.project
@@ -57,9 +53,11 @@ abstract class CopyPathProvider : DumbAwareAction() {
     val file = component.info.`object`
     if (file !is VirtualFile) return dataContext
 
-    return SimpleDataContext.getSimpleContext(
-      mapOf(LangDataKeys.VIRTUAL_FILE.name to file, CommonDataKeys.VIRTUAL_FILE_ARRAY.name to arrayOf(file)),
-      dataContext)
+    return SimpleDataContext.builder()
+      .setParent(dataContext)
+      .add(LangDataKeys.VIRTUAL_FILE, file)
+      .add(CommonDataKeys.VIRTUAL_FILE_ARRAY, arrayOf(file))
+      .build()
   }
 
   @NlsSafe
@@ -73,7 +71,7 @@ abstract class CopyPathProvider : DumbAwareAction() {
         .mapNotNull { getPathToElement(project, (if (it is PsiFileSystemItem) it.virtualFile else it.containingFile?.virtualFile), editor) }
         .ifEmpty { CommonDataKeys.VIRTUAL_FILE_ARRAY.getData(dataContext)?.mapNotNull { getPathToElement(project, it, editor) } }
         .orEmpty()
-        .filter { !it.isBlank() }
+        .filter { it.isNotBlank() }
 
     return if (refs.isNotEmpty()) refs.joinToString("\n") else null
   }
@@ -81,11 +79,13 @@ abstract class CopyPathProvider : DumbAwareAction() {
   open fun getPathToElement(project: Project, virtualFile: VirtualFile?, editor: Editor?): String? = null
 }
 
-class CopyAbsolutePathProvider : CopyPathProvider() {
+abstract class DumbAwareCopyPathProvider : CopyPathProvider(), DumbAware
+
+class CopyAbsolutePathProvider : DumbAwareCopyPathProvider() {
   override fun getPathToElement(project: Project, virtualFile: VirtualFile?, editor: Editor?) = virtualFile?.presentableUrl
 }
 
-class CopyContentRootPathProvider : CopyPathProvider() {
+class CopyContentRootPathProvider : DumbAwareCopyPathProvider() {
   override fun getPathToElement(project: Project,
                                 virtualFile: VirtualFile?,
                                 editor: Editor?): String? {
@@ -99,7 +99,7 @@ class CopyContentRootPathProvider : CopyPathProvider() {
   }
 }
 
-class CopyFileWithLineNumberPathProvider : CopyPathProvider() {
+class CopyFileWithLineNumberPathProvider : DumbAwareCopyPathProvider() {
   override fun getPathToElement(project: Project,
                                 virtualFile: VirtualFile?,
                                 editor: Editor?): String? {
@@ -108,14 +108,14 @@ class CopyFileWithLineNumberPathProvider : CopyPathProvider() {
   }
 }
 
-class CopySourceRootPathProvider : CopyPathProvider() {
+class CopySourceRootPathProvider : DumbAwareCopyPathProvider() {
   override fun getPathToElement(project: Project, virtualFile: VirtualFile?, editor: Editor?) =
     virtualFile?.let {
       VfsUtilCore.getRelativePath(virtualFile, ProjectFileIndex.getInstance(project).getSourceRootForFile(virtualFile) ?: return null)
     }
 }
 
-class CopyTBXReferenceProvider : CopyPathProvider() {
+class CopyTBXReferenceProvider : DumbAwareCopyPathProvider() {
   override fun getQualifiedName(project: Project,
                                 elements: List<PsiElement>,
                                 editor: Editor?,
@@ -123,6 +123,6 @@ class CopyTBXReferenceProvider : CopyPathProvider() {
     CopyTBXReferenceAction.createJetBrainsLink(project, elements, editor)
 }
 
-class CopyFileNameProvider : CopyPathProvider() {
-  override fun getPathToElement(project: Project, virtualFile: VirtualFile?, editor: Editor?): String? = virtualFile?.nameWithoutExtension
+class CopyFileNameProvider : DumbAwareCopyPathProvider() {
+  override fun getPathToElement(project: Project, virtualFile: VirtualFile?, editor: Editor?): String? = virtualFile?.name
 }

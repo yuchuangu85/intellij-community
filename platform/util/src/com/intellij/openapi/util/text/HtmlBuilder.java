@@ -40,7 +40,8 @@ public final class HtmlBuilder {
   /**
    * Appends a text chunk to this builder
    *
-   * @param text text to append (must not be escaped by caller)
+   * @param text text to append (must not be escaped by caller).
+   *             All {@code '\n'} characters will be converted to {@code <br/>}
    * @return this builder
    */
   @Contract("_ -> this")
@@ -81,7 +82,7 @@ public final class HtmlBuilder {
    * @return this builder
    */
   @Contract("_, _ -> this")
-  public HtmlBuilder appendWithSeparators(@NotNull HtmlChunk separator, @NotNull Iterable<HtmlChunk> children) {
+  public HtmlBuilder appendWithSeparators(@NotNull HtmlChunk separator, @NotNull Iterable<? extends HtmlChunk> children) {
     boolean first = true;
     for (HtmlChunk child : children) {
       if (!first) {

@@ -13,7 +13,7 @@ import org.jetbrains.jps.backwardRefs.JavaBackwardReferenceIndexWriter
 import org.jetbrains.jps.incremental.storage.ProjectStamps
 
 /**
- * Portable Compilation Cache - combination of {@link PortableCompilationCache.JpsCaches} and {@link org.jetbrains.intellij.build.impl.compilation.cache.CompilationOutput}s
+ * Combination of {@link PortableCompilationCache.JpsCaches} and {@link org.jetbrains.intellij.build.impl.compilation.cache.CompilationOutput}s
  */
 @CompileStatic
 final class PortableCompilationCache {
@@ -26,13 +26,25 @@ final class PortableCompilationCache {
      * {@link JpsCaches} archive upload may be skipped if only {@link org.jetbrains.intellij.build.impl.compilation.cache.CompilationOutput}s are required
      * without any incremental compilation (for tests execution as an example)
      */
-    private static final String SKIP_UPLOAD_PROPERTY = 'intellij.jps.remote.cache.compilationOutputsOnly'
+    private static final String SKIP_UPLOAD_PROPERTY = 'intellij.jps.remote.cache.uploadCompilationOutputsOnly'
+    /**
+     * {@link JpsCaches} archive download may be skipped if only {@link org.jetbrains.intellij.build.impl.compilation.cache.CompilationOutput}s are required
+     * without any incremental compilation (for tests execution as an example)
+     */
+    private static final String SKIP_DOWNLOAD_PROPERTY = 'intellij.jps.remote.cache.downloadCompilationOutputsOnly'
     private final CompilationContext context
+    final boolean skipDownload = bool(SKIP_DOWNLOAD_PROPERTY, false)
     final boolean skipUpload = bool(SKIP_UPLOAD_PROPERTY, false)
     final File dir = context.compilationData.dataStorageRoot
 
     JpsCaches(CompilationContext context) {
       this.context = context
+    }
+
+    def maybeAvailableLocally() {
+      def files = dir.list()
+      context.messages.info("$dir.absolutePath: $files")
+      dir.isDirectory() && files != null && files.length > 0
     }
   }
 
@@ -46,6 +58,10 @@ final class PortableCompilationCache {
      */
     private static final String UPLOAD_URL_PROPERTY = 'intellij.jps.remote.cache.upload.url'
     /**
+     * If true then {@link RemoteCache} is configured to be used
+     */
+    private static final boolean IS_CONFIGURED = !StringUtil.isEmptyOrSpaces(System.getProperty(RemoteCache.URL_PROPERTY))
+    /**
      * URL for read-only operations
      */
     static final String URL_PROPERTY = 'intellij.jps.remote.cache.url'
@@ -55,11 +71,6 @@ final class PortableCompilationCache {
 
     @Lazy
     String uploadUrl = { require(UPLOAD_URL_PROPERTY, "Remote Cache upload url") }()
-
-    /**
-     * If true then {@link RemoteCache} is configured to be used
-     */
-    final boolean isConfigured = !StringUtil.isEmptyOrSpaces(System.getProperty(RemoteCache.URL_PROPERTY))
   }
 
   private final CompilationContext context
@@ -91,20 +102,12 @@ final class PortableCompilationCache {
    * Commit hash for which {@link PortableCompilationCache} is to be built/downloaded
    */
   private static final String COMMIT_HASH_PROPERTY = 'build.vcs.number'
-  /**
-   * System properties to be passed to child JVM process (like tests process) to enable {@link PortableCompilationCache} for it
-   */
-  static final List<String> PROPERTIES = [
-    COMMIT_HASH_PROPERTY, PortableCompilationCache.RemoteCache.URL_PROPERTY, GIT_REPOSITORY_URL_PROPERTY,
-    AVAILABLE_FOR_HEAD_PROPERTY, FORCE_DOWNLOAD_PROPERTY,
-    JavaBackwardReferenceIndexWriter.PROP_KEY,
-    ProjectStamps.PORTABLE_CACHES_PROPERTY
-  ]
+  static final boolean CAN_BE_USED = ProjectStamps.PORTABLE_CACHES && PortableCompilationCache.RemoteCache.IS_CONFIGURED
   private final boolean forceDownload = bool(FORCE_DOWNLOAD_PROPERTY, false)
   private final boolean forceRebuild = bool(FORCE_REBUILD_PROPERTY, false)
   private final RemoteCache remoteCache = new RemoteCache()
   private final JpsCaches jpsCaches = new JpsCaches(context)
-  final boolean canBeUsed = ProjectStamps.PORTABLE_CACHES && remoteCache.isConfigured
+  final boolean canBeUsed = CAN_BE_USED
 
   @Lazy
   private String remoteGitUrl = {
@@ -116,7 +119,8 @@ final class PortableCompilationCache {
   @Lazy
   private PortableCompilationCacheDownloader downloader = {
     def availableForHeadCommit = bool(AVAILABLE_FOR_HEAD_PROPERTY, false)
-    new PortableCompilationCacheDownloader(context, remoteCache.url, remoteGitUrl, availableForHeadCommit)
+    new PortableCompilationCacheDownloader(context, remoteCache.url, remoteGitUrl,
+                                           availableForHeadCommit, jpsCaches.skipDownload)
   }()
 
   @Lazy
@@ -141,15 +145,17 @@ final class PortableCompilationCache {
    * For more details see {@link JavaBackwardReferenceIndexWriter#initialize}
    */
   def downloadCacheAndCompileProject() {
+    def cachesAreDownloaded = false
     if (forceRebuild) {
       clean()
     }
-    else if (forceDownload || !jpsCaches.dir.isDirectory() || !jpsCaches.dir.list()) {
+    else if (forceDownload || !jpsCaches.maybeAvailableLocally()) {
       downloadCache()
+      cachesAreDownloaded = true
     }
     // ensure that all Maven dependencies are resolved before compilation
     CompilationTasks.create(context).resolveProjectDependencies()
-    if (forceRebuild || !downloader.availableForHeadCommit || downloader.anyLocalChanges() || !forceDownload) {
+    if (!cachesAreDownloaded || !downloader.availableForHeadCommit || downloader.anyLocalChanges) {
       context.options.incrementalCompilation = !forceRebuild
       compileProject()
     }

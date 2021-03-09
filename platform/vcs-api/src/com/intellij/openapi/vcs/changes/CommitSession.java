@@ -3,7 +3,7 @@ package com.intellij.openapi.vcs.changes;
 
 import com.intellij.openapi.ui.ValidationInfo;
 import com.intellij.openapi.util.NlsSafe;
-import org.jetbrains.annotations.CalledInAwt;
+import com.intellij.util.concurrency.annotations.RequiresEdt;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -51,7 +51,7 @@ public interface CommitSession {
     return null;
   }
 
-  @CalledInAwt
+  @RequiresEdt
   default ValidationInfo validateFields() {
     return null;
   }

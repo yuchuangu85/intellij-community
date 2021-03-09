@@ -8,9 +8,10 @@ import com.intellij.internal.statistic.StatisticsBundle
 import com.intellij.internal.statistic.StatisticsDevKitUtil
 import com.intellij.internal.statistic.StatisticsDevKitUtil.DEFAULT_RECORDER
 import com.intellij.internal.statistic.StatisticsDevKitUtil.STATISTICS_NOTIFICATION_GROUP_ID
+import com.intellij.internal.statistic.eventLog.StatisticsEventLogProviderUtil
 import com.intellij.internal.statistic.eventLog.fus.FeatureUsageLogger.getConfig
 import com.intellij.internal.statistic.eventLog.fus.FeatureUsageLogger.rollOver
-import com.intellij.internal.statistic.eventLog.getEventLogProvider
+import com.intellij.internal.statistic.utils.StatisticsRecorderUtil
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationBuilder
 import com.intellij.notification.NotificationType
@@ -28,9 +29,9 @@ import com.intellij.openapi.vfs.LocalFileSystem
 /**
  * Collects the data from all state collectors and record it in event log.
  *
- * @see ApplicationUsagesCollector
+ * @see com.intellij.internal.statistic.service.fus.collectors.ApplicationUsagesCollector
  *
- * @see ProjectUsagesCollector
+ * @see com.intellij.internal.statistic.service.fus.collectors.ProjectUsagesCollector
  */
 internal class RecordStateStatisticsEventLogAction(private val recorderId: String = DEFAULT_RECORDER,
                                                    private val myShowNotification: Boolean = true) : DumbAwareAction(
@@ -75,13 +76,14 @@ internal class RecordStateStatisticsEventLogAction(private val recorderId: Strin
 
   override fun update(e: AnActionEvent) {
     super.update(e)
-    e.presentation.isEnabled = recorderId == DEFAULT_RECORDER && !FusStatesRecorder.isRecordingInProgress()
+    val isTestMode = recorderId == DEFAULT_RECORDER && StatisticsRecorderUtil.isTestModeEnabled(DEFAULT_RECORDER)
+    e.presentation.isEnabled = isTestMode && !FusStatesRecorder.isRecordingInProgress()
   }
 
   companion object {
 
     fun checkLogRecordingEnabled(project: Project?, recorderId: String?): Boolean {
-      if (getEventLogProvider(recorderId!!).isRecordEnabled()) {
+      if (StatisticsEventLogProviderUtil.getEventLogProvider(recorderId!!).isRecordEnabled()) {
         return true
       }
       NotificationBuilder(STATISTICS_NOTIFICATION_GROUP_ID, StatisticsBundle.message("stats.logging.is.disabled"),

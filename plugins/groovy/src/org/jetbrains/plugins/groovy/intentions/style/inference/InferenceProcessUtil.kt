@@ -1,4 +1,4 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.intentions.style.inference
 
 import com.intellij.lang.jvm.JvmParameter
@@ -9,6 +9,9 @@ import com.intellij.psi.CommonClassNames.JAVA_LANG_OBJECT
 import com.intellij.psi.CommonClassNames.JAVA_LANG_OVERRIDE
 import com.intellij.psi.impl.source.resolve.graphInference.InferenceVariable
 import com.intellij.psi.impl.source.resolve.graphInference.InferenceVariablesOrder
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.search.LocalSearchScope
+import com.intellij.psi.search.SearchScope
 import com.intellij.psi.util.TypeConversionUtil
 import com.intellij.psi.util.parentOfType
 import com.intellij.psi.util.parentsOfType
@@ -29,6 +32,7 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrMe
 import org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames.GROOVY_LANG_CLOSURE
 import org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames.GROOVY_OBJECT
 import org.jetbrains.plugins.groovy.lang.resolve.processors.inference.GroovyInferenceSession
+import org.jetbrains.plugins.groovy.lang.resolve.processors.inference.forbidInteriorReturnTypeInference
 import org.jetbrains.plugins.groovy.lang.resolve.processors.inference.putAll
 import org.jetbrains.plugins.groovy.lang.resolve.processors.inference.type
 
@@ -80,7 +84,7 @@ fun GroovyPsiElementFactory.createProperTypeParameter(name: String, superType: P
 
   val extendsBound =
     if (filteredSupertypes.isNotEmpty()) {
-      " extends ${filteredSupertypes.joinToString("&") { it.getCanonicalText(true) }}"
+      " extends ${filteredSupertypes.joinToString("&") { it.getCanonicalText(false) }}"
     }
     else {
       ""
@@ -93,7 +97,7 @@ fun PsiType.forceWildcardsAsTypeArguments(): PsiType {
   val manager = resolve()?.manager ?: return this
   val factory = GroovyPsiElementFactory.getInstance(manager.project)
   return accept(object : PsiTypeMapper() {
-    override fun visitClassType(classType: PsiClassType): PsiType? {
+    override fun visitClassType(classType: PsiClassType): PsiType {
       val mappedParameters = classType.parameters.map {
         val accepted = it.accept(this)
         when {
@@ -123,7 +127,7 @@ fun PsiType?.isClosureTypeDeep(): Boolean {
 tailrec fun PsiSubstitutor.recursiveSubstitute(type: PsiType, recursionDepth: Int = 20): PsiType {
   if (recursionDepth == 0) {
     return type.accept(object : PsiTypeMapper() {
-      override fun visitClassType(classType: PsiClassType): PsiType? {
+      override fun visitClassType(classType: PsiClassType): PsiType {
         return classType.rawType()
       }
     })
@@ -268,7 +272,12 @@ fun createVirtualMethod(method: GrMethod, typeParameterList: PsiTypeParameterLis
   val factory = GroovyPsiElementFactory.getInstance(method.project)
   val newFile = factory.createGroovyFile(fileText, false, method)
   val virtualMethod = newFile.findElementAt(offset)?.parentOfType<GrMethod>() ?: return null
+  disableInteriorReturnTypeInference(virtualMethod)
   return SmartPointerManager.createPointer(virtualMethod)
+}
+
+private fun disableInteriorReturnTypeInference(virtualMethod: GrMethod) {
+  virtualMethod.putUserData(forbidInteriorReturnTypeInference, Unit)
 }
 
 fun convertToGroovyMethod(method: PsiMethod): GrMethod? {
@@ -307,10 +316,10 @@ fun PsiSubstitutor.removeForeignTypeParameters(method: GrMethod): PsiSubstitutor
     }
 
     override fun visitIntersectionType(intersectionType: PsiIntersectionType): PsiType? {
-      return compress(intersectionType.conjuncts?.filterNotNull()?.mapNotNull { it.accept(this) })
+      return compress(intersectionType.conjuncts.filterNotNull().mapNotNull { it.accept(this) })
     }
 
-    override fun visitWildcardType(wildcardType: PsiWildcardType): PsiType? {
+    override fun visitWildcardType(wildcardType: PsiWildcardType): PsiType {
       val bound = wildcardType.bound?.accept(this) ?: return wildcardType
       return when {
         wildcardType.isExtends -> PsiWildcardType.createExtends(method.manager, bound)
@@ -386,9 +395,21 @@ private fun locateMethod(file: GroovyFileBase, method: GrMethod): GrMethod? {
 @Suppress("RemoveExplicitTypeArguments")
 internal fun getOriginalMethod(method: GrMethod): GrMethod {
   return when (val originalFile = method.containingFile?.originalFile) {
-      null -> method
-      method.containingFile -> method
-      is GroovyFileBase -> locateMethod(originalFile, method) ?: method
-      else -> originalFile.findElementAt(method.textOffset)?.parentOfType<GrMethod>()?.takeIf { it.name == method.name } ?: method
-    }
+    null -> method
+    method.containingFile -> method
+    is GroovyFileBase -> locateMethod(originalFile, method) ?: method
+    else -> originalFile.findElementAt(method.textOffset)?.parentOfType<GrMethod>()?.takeIf { it.name == method.name } ?: method
+  }
+}
+
+private fun getFileScope(method: GrMethod): SearchScope? {
+  val originalMethod = getOriginalMethod(method)
+  return originalMethod.containingFile?.let { LocalSearchScope(arrayOf(it), null, true) }
+}
+
+fun getSearchScope(method: GrMethod, shouldUseReducedScope: Boolean): SearchScope? = if (shouldUseReducedScope) {
+  getFileScope(method)
+}
+else {
+  GlobalSearchScope.allScope(method.project)
 }

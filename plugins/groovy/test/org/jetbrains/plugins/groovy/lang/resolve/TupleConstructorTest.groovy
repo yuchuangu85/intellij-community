@@ -348,6 +348,24 @@ class Rr extends NN {
   }
 
   @Test
+  void 'super constructor highlighting'() {
+    highlightingTest """
+class Nn {
+    Nn(int a) {}
+}
+
+<error>@groovy.transform.TupleConstructor
+class Rr extends Nn</error> {
+    String actionType
+}
+
+@groovy.transform.CompileStatic
+static void main(String[] args) {
+    def x = new Rr("")
+}"""
+  }
+
+  @Test
   void 'pre highlighting'() {
     highlightingTest """
 class NN { NN(String s) {} }
@@ -386,5 +404,23 @@ static void main(String[] args) {
     new Rr<error>("", 2)</error>
     new Rr("", true)
 }"""
+  }
+
+  @Test
+  void 'inner class'() {
+    highlightingTest """
+@groovy.transform.CompileStatic
+class DtoTest {
+
+    @groovy.transform.TupleConstructor
+    class Dto {
+        String value
+    }
+    
+    void useGeneratedConstructor() {
+        new Dto("abc")
+    }
+}
+"""
   }
 }

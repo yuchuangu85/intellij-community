@@ -14,11 +14,11 @@ import com.intellij.openapi.vcs.history.VcsRevisionNumber;
 import com.intellij.openapi.vcs.versionBrowser.CommittedChangeList;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.Consumer;
+import com.intellij.util.concurrency.annotations.RequiresEdt;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.text.JBDateFormat;
 import com.intellij.vcsUtil.VcsUtil;
 import com.intellij.xml.util.XmlStringUtil;
-import org.jetbrains.annotations.CalledInAwt;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -199,7 +199,7 @@ public abstract class FileAnnotation {
    *
    * @param newFileAnnotation annotations to be shown or `null` to load annotations again
    */
-  @CalledInAwt
+  @RequiresEdt
   public synchronized final void reload(@Nullable FileAnnotation newFileAnnotation) {
     if (myReloader != null) myReloader.consume(newFileAnnotation);
   }
@@ -218,14 +218,6 @@ public abstract class FileAnnotation {
   public synchronized final void setReloader(@Nullable Consumer<? super FileAnnotation> reloader) {
     if (myIsClosed) return;
     myReloader = reloader;
-  }
-
-  /**
-   * @deprecated does nothing
-   */
-  @Deprecated
-  public boolean revisionsNotEmpty() {
-    return true;
   }
 
 

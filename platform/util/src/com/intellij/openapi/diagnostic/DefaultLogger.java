@@ -74,16 +74,18 @@ public class DefaultLogger extends Logger {
   }
 
   @Override
-  public void setLevel(Level level) { }
+  public void setLevel(@NotNull Level level) { }
 
   public static @NonNls String attachmentsToString(@Nullable Throwable t) {
-    List<Attachment> attachments = ExceptionUtil
-      .findCauseAndSuppressed(t, ExceptionWithAttachments.class)
-      .stream()
-      .flatMap(e -> Stream.of(e.getAttachments()))
-      .collect(Collectors.toList());
-    if (!attachments.isEmpty()) {
-      return "\n\nAttachments:\n" + StringUtil.join(attachments, ATTACHMENT_TO_STRING::apply, "\n----\n");
+    if (t != null) {
+      List<Attachment> attachments = ExceptionUtil
+        .findCauseAndSuppressed(t, ExceptionWithAttachments.class)
+        .stream()
+        .flatMap(e -> Stream.of(e.getAttachments()))
+        .collect(Collectors.toList());
+      if (!attachments.isEmpty()) {
+        return "\n\nAttachments:\n" + StringUtil.join(attachments, ATTACHMENT_TO_STRING::apply, "\n----\n");
+      }
     }
     return "";
   }

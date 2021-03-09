@@ -25,7 +25,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static com.intellij.application.options.JavaDocFormattingPanel.*;
-import static com.intellij.psi.codeStyle.CodeStyleSettingsCustomizableOptions.getWrapOptions;
+import static com.intellij.psi.codeStyle.CodeStyleSettingsCustomizableOptions.getInstance;
 
 /**
  * @author rvishnyakov
@@ -34,7 +34,7 @@ public class JavaLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSett
   @NotNull
   @Override
   public CodeStyleConfigurable createConfigurable(@NotNull CodeStyleSettings settings, @NotNull CodeStyleSettings modelSettings) {
-    return new CodeStyleAbstractConfigurable(settings, modelSettings, "Java") {
+    return new CodeStyleAbstractConfigurable(settings, modelSettings, JavaLanguage.INSTANCE.getDisplayName()) {
       @Override
       protected CodeStyleAbstractPanel createPanel(final CodeStyleSettings settings) {
         return new JavaCodeStyleMainPanel(getCurrentSettings(), settings);
@@ -77,24 +77,23 @@ public class JavaLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSett
   public void customizeSettings(@NotNull CodeStyleSettingsCustomizable consumer, @NotNull SettingsType settingsType) {
     if (settingsType == SettingsType.SPACING_SETTINGS) {
       consumer.showAllStandardOptions();
-      consumer.showCustomOption(JavaCodeStyleSettings.class, "SPACES_WITHIN_ANGLE_BRACKETS", "Angle brackets",
-                                CodeStyleSettingsCustomizableOptions.SPACES_WITHIN.get());
+      consumer.showCustomOption(JavaCodeStyleSettings.class, "SPACES_WITHIN_ANGLE_BRACKETS",
+                                JavaBundle.message("code.style.settings.angle.spacing.brackets"), getInstance().SPACES_WITHIN);
       consumer.showCustomOption(JavaCodeStyleSettings.class, "SPACE_WITHIN_RECORD_HEADER",
-                                JavaBundle.message("checkbox.spaces.record.header"),
-                                CodeStyleSettingsCustomizableOptions.SPACES_WITHIN.get());
+                                JavaBundle.message("checkbox.spaces.record.header"), getInstance().SPACES_WITHIN);
 
-      String groupName = CodeStyleSettingsCustomizableOptions.SPACES_IN_TYPE_ARGUMENTS.get();
+      String groupName = getInstance().SPACES_IN_TYPE_ARGUMENTS;
       consumer.moveStandardOption("SPACE_AFTER_COMMA_IN_TYPE_ARGUMENTS", groupName);
-      consumer
-        .showCustomOption(JavaCodeStyleSettings.class, "SPACE_AFTER_CLOSING_ANGLE_BRACKET_IN_TYPE_ARGUMENT", "After closing angle bracket",
-                          groupName);
+      consumer.showCustomOption(JavaCodeStyleSettings.class, "SPACE_AFTER_CLOSING_ANGLE_BRACKET_IN_TYPE_ARGUMENT",
+                                JavaBundle.message("code.style.settings.spacing.after.closing.angle.bracket"), groupName);
 
-      groupName = CodeStyleSettingsCustomizableOptions.SPACES_IN_TYPE_PARAMETERS.get();
+      groupName = getInstance().SPACES_IN_TYPE_PARAMETERS;
       consumer.showCustomOption(JavaCodeStyleSettings.class, "SPACE_BEFORE_OPENING_ANGLE_BRACKET_IN_TYPE_PARAMETER",
                                 ApplicationBundle.message("checkbox.spaces.before.opening.angle.bracket"), groupName);
-      consumer.showCustomOption(JavaCodeStyleSettings.class, "SPACE_AROUND_TYPE_BOUNDS_IN_TYPE_PARAMETERS", "Around type bounds", groupName);
+      consumer.showCustomOption(JavaCodeStyleSettings.class, "SPACE_AROUND_TYPE_BOUNDS_IN_TYPE_PARAMETERS",
+                                JavaBundle.message("code.style.settings.spacing.around.type.bounds"), groupName);
 
-      groupName = CodeStyleSettingsCustomizableOptions.SPACES_OTHER.get();
+      groupName = getInstance().SPACES_OTHER;
       consumer.showCustomOption(JavaCodeStyleSettings.class, "SPACE_BEFORE_COLON_IN_FOREACH", JavaBundle.message(
         "checkbox.spaces.before.colon.in.foreach"), groupName);
       consumer.showCustomOption(JavaCodeStyleSettings.class, "SPACE_INSIDE_ONE_LINE_ENUM_BRACES", JavaBundle.message(
@@ -189,13 +188,15 @@ public class JavaLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSett
                                    "ALIGN_CONSECUTIVE_VARIABLE_DECLARATIONS",
                                    "ALIGN_CONSECUTIVE_ASSIGNMENTS",
                                    "ALIGN_SUBSEQUENT_SIMPLE_METHODS",
-                                   "WRAP_FIRST_METHOD_IN_CALL_CHAIN");
+                                   "WRAP_FIRST_METHOD_IN_CALL_CHAIN",
+                                   "BUILDER_METHODS",
+                                   "KEEP_BUILDER_METHODS_INDENTS");
 
       consumer.showCustomOption(JavaCodeStyleSettings.class,
                                 "ANNOTATION_PARAMETER_WRAP",
                                 JavaBundle.message("wrapping.annotation.parameters"),
                                 null,
-                                getWrapOptions(), CodeStyleSettingsCustomizable.WRAP_VALUES);
+                                getInstance().WRAP_OPTIONS, CodeStyleSettingsCustomizable.WRAP_VALUES);
 
       consumer.showCustomOption(JavaCodeStyleSettings.class,
                                 "ALIGN_MULTILINE_ANNOTATION_PARAMETERS",
@@ -216,7 +217,7 @@ public class JavaLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSett
                                 "RECORD_COMPONENTS_WRAP",
                                 recordComponentsGroup,
                                 null,
-                                getWrapOptions(), CodeStyleSettingsCustomizable.WRAP_VALUES);
+                                getInstance().WRAP_OPTIONS, CodeStyleSettingsCustomizable.WRAP_VALUES);
       consumer.showCustomOption(JavaCodeStyleSettings.class,
                                 "ALIGN_MULTILINE_RECORDS",
                                 ApplicationBundle.message("wrapping.align.when.multiline"),
@@ -234,7 +235,7 @@ public class JavaLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSett
       consumer.showAllStandardOptions();
       consumer.showCustomOption(JavaCodeStyleSettings.class, "BLANK_LINES_AROUND_INITIALIZER",
                                 JavaBundle.message("editbox.blanklines.around.initializer"),
-                                CodeStyleSettingsCustomizableOptions.BLANK_LINES.get());
+                                getInstance().BLANK_LINES);
     }
     else if (settingsType == SettingsType.COMMENTER_SETTINGS) {
       consumer.showAllStandardOptions();
@@ -514,6 +515,7 @@ public class JavaLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSett
     "    for (int i = 0; i < x; i++) {\n" +
     "      y += (y ^ 0x123) << 2;\n" +
     "    }\n" +
+    "    for (int a: X) { System.out.print(a); }\n" +
     "    do {\n" +
     "      try(MyResource r1 = getResource(); MyResource r2 = null) {\n" +
     "        if (0 < x && x < 10) {\n" +

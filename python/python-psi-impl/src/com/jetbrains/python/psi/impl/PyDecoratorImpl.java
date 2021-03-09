@@ -79,7 +79,13 @@ public class PyDecoratorImpl extends PyBaseElementImpl<PyDecoratorStub> implemen
 
   @Override
   public boolean hasArgumentList() {
-    return getExpression() instanceof PyCallExpression;
+    final PyDecoratorStub stub = getStub();
+    if (stub != null) {
+      return stub.hasArgumentList();
+    }
+    else {
+      return getExpression() instanceof PyCallExpression;
+    }
   }
 
   @Override
@@ -102,6 +108,11 @@ public class PyDecoratorImpl extends PyBaseElementImpl<PyDecoratorStub> implemen
   }
 
   @Override
+  public @Nullable PyExpression getReceiver(@Nullable PyCallable resolvedCallee) {
+    return PyCallExpressionHelper.getReceiver(this, resolvedCallee);
+  }
+
+  @Override
   @Nullable
   public PyExpression getCallee() {
     final PyExpression exprAfterAt = getExpression();
@@ -110,7 +121,7 @@ public class PyDecoratorImpl extends PyBaseElementImpl<PyDecoratorStub> implemen
 
   @NotNull
   @Override
-  public List<PyCallableType> multiResolveCallee(@NotNull PyResolveContext resolveContext, int implicitOffset) {
+  public List<PyCallableType> multiResolveCallee(@NotNull PyResolveContext resolveContext) {
     final Function<PyCallableType, PyCallableType> mapping = callableType -> {
       if (!hasArgumentList()) {
         // NOTE: that +1 thing looks fishy
@@ -130,7 +141,7 @@ public class PyDecoratorImpl extends PyBaseElementImpl<PyDecoratorStub> implemen
 
   @NotNull
   @Override
-  public List<PyArgumentsMapping> multiMapArguments(@NotNull PyResolveContext resolveContext, int implicitOffset) {
+  public List<PyArgumentsMapping> multiMapArguments(@NotNull PyResolveContext resolveContext) {
     return PyCallExpressionHelper.mapArguments(this, resolveContext);
   }
 

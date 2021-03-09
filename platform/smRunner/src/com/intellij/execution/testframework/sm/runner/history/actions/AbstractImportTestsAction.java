@@ -1,9 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.testframework.sm.runner.history.actions;
 
 import com.intellij.execution.*;
 import com.intellij.execution.configurations.*;
 import com.intellij.execution.executors.DefaultRunExecutor;
+import com.intellij.execution.impl.RunManagerImpl;
+import com.intellij.execution.impl.RunnerAndConfigurationSettingsImpl;
 import com.intellij.execution.runners.ExecutionEnvironment;
 import com.intellij.execution.runners.ExecutionEnvironmentBuilder;
 import com.intellij.execution.runners.ProgramRunner;
@@ -31,10 +33,7 @@ import org.xml.sax.helpers.DefaultHandler;
 
 import javax.swing.*;
 import javax.xml.parsers.SAXParserFactory;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.io.StringReader;
+import java.io.*;
 import java.util.Arrays;
 
 /**
@@ -140,13 +139,16 @@ public abstract class AbstractImportTestsAction extends AnAction {
       myFile = file;
       myProject = project;
       class TerminateParsingException extends SAXException { }
-      try (InputStream inputStream = new FileInputStream(VfsUtilCore.virtualToIoFile(myFile))) {
+      try (InputStream inputStream = new BufferedInputStream(new FileInputStream(VfsUtilCore.virtualToIoFile(myFile)))) {
         SAXParserFactory.newInstance().newSAXParser().parse(inputStream, new DefaultHandler() {
           boolean isConfigContent = false;
           final StringBuilder builder = new StringBuilder();
-          
+
           @Override
-          public void startElement(String uri, String localName, String qName, Attributes attributes) {
+          public void startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException {
+            if (qName.equals("root")) {
+              throw new TerminateParsingException();
+            }
             if (qName.equals("config")) {
               isConfigContent = true;
             }
@@ -156,7 +158,7 @@ public abstract class AbstractImportTestsAction extends AnAction {
                 builder.append(" ")
                   .append(attributes.getQName(i))
                   .append("=\"")
-                  .append(attributes.getValue(i))
+                  .append(JDOMUtil.escapeText(attributes.getValue(i)))
                   .append("\"");
               }
               builder.append(">");
@@ -186,7 +188,10 @@ public abstract class AbstractImportTestsAction extends AnAction {
                     myConfiguration = configurationType.getConfigurationFactories()[0].createTemplateConfiguration(project);
                     myConfiguration.setName(config.getAttributeValue("name"));
                     myConfiguration.readExternal(config);
-  
+                    RunManagerImpl runManager = RunManagerImpl.getInstanceImpl(myProject);
+                    runManager.readBeforeRunTasks(config.getChild("method"),
+                                                  new RunnerAndConfigurationSettingsImpl(runManager), myConfiguration);
+
                     final Executor executor = ExecutorRegistry.getInstance().getExecutorById(DefaultRunExecutor.EXECUTOR_ID);
                     if (executor != null) {
                       if (myConfiguration instanceof SMRunnerConsolePropertiesProvider) {
@@ -197,7 +202,7 @@ public abstract class AbstractImportTestsAction extends AnAction {
                 }
                 myTargetId = config.getAttributeValue("target");
               }
-              catch (Exception e) { 
+              catch (Exception e) {
                 LOG.debug(e);
               }
               throw new TerminateParsingException();
@@ -232,7 +237,8 @@ public abstract class AbstractImportTestsAction extends AnAction {
 
     @Nullable
     @Override
-    public RunProfileState getState(@NotNull Executor executor, @NotNull ExecutionEnvironment environment) throws ExecutionException {
+    public RunProfileState getState(@NotNull Executor executor, @NotNull ExecutionEnvironment environment) throws
+                                                                                                           ExecutionException {
       if (!myImported) {
         myImported = true;
         return new ImportedTestRunnableState(this, VfsUtilCore.virtualToIoFile(myFile));
@@ -243,14 +249,14 @@ public abstract class AbstractImportTestsAction extends AnAction {
         }
         catch (Throwable e) {
           if (myTargetId != null && getTarget() == null) {
-            throw new ExecutionException("The target " + myTargetId + " does not exist");
+            throw new ExecutionException(SmRunnerBundle.message("dialog.message.target.does.not.exist", myTargetId));
           }
 
           LOG.info(e);
-          throw new ExecutionException("Unable to run the configuration: settings are corrupted");
+          throw new ExecutionException(SmRunnerBundle.message("dialog.message.unable.to.run.configuration.settings.are.corrupted"));
         }
       }
-      throw new ExecutionException("Unable to run the configuration: failed to detect test framework");
+      throw new ExecutionException(SmRunnerBundle.message("dialog.message.unable.to.run.configuration.failed.to.detect.test.framework"));
     }
 
     @NotNull

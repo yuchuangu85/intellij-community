@@ -26,7 +26,6 @@ import com.intellij.psi.search.searches.SuperMethodsSearch;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.GroovyBundle;
-import org.jetbrains.plugins.groovy.codeInspection.GroovyInspectionBundle;
 import org.jetbrains.plugins.groovy.codeInspection.GroovyQuickFixFactory;
 import org.jetbrains.plugins.groovy.codeInspection.GroovySuppressableInspectionTool;
 import org.jetbrains.plugins.groovy.codeInspection.GroovyUnusedDeclarationInspection;
@@ -124,7 +123,7 @@ public class GroovyPostHighlightingPass extends TextEditorHighlightingPass {
                                                                                      progress, usageHelper
             )) {
               HighlightInfo highlightInfo = UnusedSymbolUtil
-                .createUnusedSymbolInfo(nameId, GroovyBundle.message("text.class.0.is.unused", name), HighlightInfoType.UNUSED_SYMBOL);
+                .createUnusedSymbolInfo(nameId, GroovyBundle.message("text.class.0.is.unused", name), HighlightInfoType.UNUSED_SYMBOL, GroovyUnusedDeclarationInspection.SHORT_NAME);
               QuickFixAction.registerQuickFixAction(highlightInfo, QuickFixFactory.getInstance().createSafeDeleteFix(element), unusedDefKey);
               ContainerUtil.addIfNotNull(unusedDeclarations, highlightInfo);
             }
@@ -137,14 +136,14 @@ public class GroovyPostHighlightingPass extends TextEditorHighlightingPass {
                 } else {
                   message = GroovyBundle.message("text.method.0.is.unused", name);
                 }
-                HighlightInfo highlightInfo = UnusedSymbolUtil.createUnusedSymbolInfo(nameId, message, HighlightInfoType.UNUSED_SYMBOL);
+                HighlightInfo highlightInfo = UnusedSymbolUtil.createUnusedSymbolInfo(nameId, message, HighlightInfoType.UNUSED_SYMBOL, GroovyUnusedDeclarationInspection.SHORT_NAME);
                 QuickFixAction.registerQuickFixAction(highlightInfo, QuickFixFactory.getInstance().createSafeDeleteFix(method), unusedDefKey);
                 ContainerUtil.addIfNotNull(unusedDeclarations, highlightInfo);
               }
             }
             else if (element instanceof GrField && isFieldUnused((GrField)element, progress, usageHelper)) {
               HighlightInfo highlightInfo =
-                UnusedSymbolUtil.createUnusedSymbolInfo(nameId, GroovyBundle.message("text.property.0.is.unused", name), HighlightInfoType.UNUSED_SYMBOL);
+                UnusedSymbolUtil.createUnusedSymbolInfo(nameId, GroovyBundle.message("text.property.0.is.unused", name), HighlightInfoType.UNUSED_SYMBOL, GroovyUnusedDeclarationInspection.SHORT_NAME);
               QuickFixAction.registerQuickFixAction(highlightInfo, QuickFixFactory.getInstance().createSafeDeleteFix(element), unusedDefKey);
               ContainerUtil.addIfNotNull(unusedDeclarations, highlightInfo);
             }
@@ -171,7 +170,7 @@ public class GroovyPostHighlightingPass extends TextEditorHighlightingPass {
           if (methodMayHaveUnusedParameters(method)) {
             PsiElement identifier = parameter.getNameIdentifierGroovy();
             HighlightInfo highlightInfo = UnusedSymbolUtil
-              .createUnusedSymbolInfo(identifier, GroovyBundle.message("text.parameter.0.is.unused", parameter.getName()), HighlightInfoType.UNUSED_SYMBOL);
+              .createUnusedSymbolInfo(identifier, GroovyBundle.message("text.parameter.0.is.unused", parameter.getName()), HighlightInfoType.UNUSED_SYMBOL, GroovyUnusedDeclarationInspection.SHORT_NAME);
             QuickFixAction.registerQuickFixAction(highlightInfo, GroovyQuickFixFactory.getInstance().createRemoveUnusedGrParameterFix(parameter), unusedDefKey);
             ContainerUtil.addIfNotNull(unusedDeclarations, highlightInfo);
           }
@@ -232,7 +231,7 @@ public class GroovyPostHighlightingPass extends TextEditorHighlightingPass {
     List<HighlightInfo> infos = new ArrayList<>(myUnusedDeclarations);
     for (GrImportStatement unusedImport : myUnusedImports) {
       HighlightInfo info = HighlightInfo.newHighlightInfo(HighlightInfoType.UNUSED_SYMBOL).range(calculateRangeToUse(unusedImport))
-        .descriptionAndTooltip(GroovyInspectionBundle.message("unused.import")).create();
+        .descriptionAndTooltip(GroovyBundle.message("unused.import")).create();
       QuickFixAction.registerQuickFixAction(info, GroovyQuickFixFactory.getInstance().createOptimizeImportsFix(false));
       infos.add(info);
     }

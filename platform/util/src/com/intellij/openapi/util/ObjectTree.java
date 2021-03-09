@@ -7,6 +7,7 @@ import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.util.objectTree.ThrowableInterner;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.SmartList;
+import com.intellij.util.containers.CollectionFactory;
 import com.intellij.util.containers.ContainerUtil;
 import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet;
@@ -15,6 +16,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 final class ObjectTree {
@@ -25,7 +27,7 @@ final class ObjectTree {
   // guarded by treeLock
   private final Map<Disposable, ObjectNode> myObject2NodeMap = new Reference2ObjectOpenHashMap<>();
   // Disposable -> trace or boolean marker (if trace unavailable)
-  private final Map<Disposable, Object> myDisposedObjects = ContainerUtil.createWeakMap(100, 0.5f, ContainerUtil.identityStrategy()); // guarded by treeLock
+  private final Map<Disposable, Object> myDisposedObjects = CollectionFactory.createWeakIdentityMap(100, 0.5f); // guarded by treeLock
 
   private final Object treeLock = new Object();
 
@@ -149,14 +151,15 @@ final class ObjectTree {
     }
   }
 
-  void executeAllChildren(@NotNull Disposable object) {
+  void executeAllChildren(@NotNull Disposable object, @Nullable Predicate<? super Disposable> predicate) {
     runWithTrace(() -> {
       ObjectNode node = getNode(object);
       if (node == null) {
         return Collections.emptyList();
       }
+
       List<Disposable> disposables = new ArrayList<>();
-      node.getAndRemoveChildrenRecursively(disposables);
+      node.getAndRemoveChildrenRecursively(disposables, predicate);
       return disposables;
     });
   }
@@ -217,9 +220,11 @@ final class ObjectTree {
           objectNode = objectNode.getParent();
         }
         final Throwable trace = objectNode.getTrace();
-        RuntimeException exception = new RuntimeException("Memory leak detected: '" + object + "' of " + object.getClass()
-                                                          + "\nSee the cause for the corresponding Disposer.register() stacktrace:\n",
-                                                          trace);
+        String message = "Memory leak detected: '" + object + "' of " + object.getClass() + " is registered in Disposer but wasn't disposed.\n" +
+                         "Register it with a proper parentDisposable or ensure that it's always disposed by direct Disposer.dispose call.\n" +
+                         "See https://jetbrains.org/intellij/sdk/docs/basics/disposers.html for more details.\n" +
+                         "The corresponding Disposer.register() stacktrace is shown as the cause:\n";
+        RuntimeException exception = new RuntimeException(message, trace);
         if (throwError) {
           throw exception;
         }

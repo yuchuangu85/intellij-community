@@ -1,7 +1,7 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.notification.impl;
 
-import com.intellij.AbstractBundle;
+import com.intellij.BundleBase;
 import com.intellij.DynamicBundle;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationDisplayType;
@@ -11,24 +11,35 @@ import com.intellij.openapi.extensions.PluginDescriptor;
 import com.intellij.openapi.extensions.RequiredElement;
 import com.intellij.openapi.util.IconLoader;
 import com.intellij.openapi.util.NlsContexts;
+import com.intellij.openapi.util.NlsSafe;
+import com.intellij.openapi.util.text.StringUtilRt;
+import com.intellij.util.xmlb.Converter;
 import com.intellij.util.xmlb.annotations.Attribute;
 import com.intellij.util.xmlb.annotations.Transient;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.ResourceBundle;
 
 /**
- * Extension point to register notification group.
- * To get an instance of registered NotificationGroup use {@link com.intellij.notification.NotificationGroupManager}
+ * Registers notification group.
+ * <p>
+ * Use {@link com.intellij.notification.NotificationGroupManager#getNotificationGroup(String)} to obtain instance via {@link #id}.
+ * </p>
+ * <p>
+ * See <a href="https://jetbrains.org/intellij/sdk/docs/user_interface_components/notifications.html#top-level-notifications">Top-Level Notifications</a>.
+ * </p>
  */
 public final class NotificationGroupEP implements PluginAware {
-  static final ExtensionPointName<NotificationGroupEP> EP_NAME = ExtensionPointName.create("com.intellij.notificationGroup");
+  static final ExtensionPointName<NotificationGroupEP> EP_NAME = new ExtensionPointName<>("com.intellij.notificationGroup");
 
   @Attribute("id")
   @RequiredElement
-  public String id;
+  public @NlsSafe String id;
 
   @Attribute("displayType")
   @RequiredElement
@@ -58,14 +69,40 @@ public final class NotificationGroupEP implements PluginAware {
    * @see #bundle
    */
   @Attribute("key")
+  @NlsContexts.NotificationTitle
   public String key;
 
   /**
-   * Semicolon-separated list of notificationIds which should be recorder in feature usage statistics.
+   * Semicolon-separated list of notificationIds which should be recorded in feature usage statistics.
+   *
    * @see Notification#displayId
    */
-  @Attribute("notificationIds")
-  public String notificationIds;
+  @Attribute(value = "notificationIds", converter = IdParser.class)
+  public @Nullable List<String> notificationIds;
+
+  private static final class IdParser extends Converter<List<String>> {
+    @Override
+    public @NotNull List<String> fromString(@NotNull String value) {
+      if (value.isEmpty()) {
+        return Collections.emptyList();
+      }
+
+      String[] values = StringUtilRt.convertLineSeparators(value, "").split(";");
+      List<String> result = new ArrayList<>(values.length);
+      for (String item : values) {
+        if (!item.isEmpty()) {
+          result.add(item.trim());
+        }
+      }
+      return result;
+    }
+
+    @NotNull
+    @Override
+    public String toString(@NotNull List<String> ids) {
+      return String.join(",", ids);
+    }
+  }
 
   private PluginDescriptor pluginDescriptor;
 
@@ -75,13 +112,11 @@ public final class NotificationGroupEP implements PluginAware {
       return id;
     }
     ResourceBundle resourceBundle = DynamicBundle.INSTANCE.getResourceBundle(baseName, getPluginDescriptor().getPluginClassLoader());
-    return AbstractBundle.message(resourceBundle, key);
+    return BundleBase.messageOrDefault(resourceBundle, key, null);
   }
 
-  @Nullable
-  public Icon getIcon() {
-    if (icon == null) return null;
-    return IconLoader.findIcon(icon, getClass());
+  public @Nullable Icon getIcon() {
+    return icon == null ? null : IconLoader.findIcon(icon, getClass());
   }
 
   @Transient
@@ -115,19 +150,19 @@ public final class NotificationGroupEP implements PluginAware {
 
   private enum DisplayType {
     /**
-     * No popup
+     * No popup.
      */
     NONE(NotificationDisplayType.NONE),
     /**
-     *  Expires automatically after 10 seconds.
+     * Expires automatically after 10 seconds.
      */
     BALLOON(NotificationDisplayType.BALLOON),
     /**
-     * Needs to be closed by user
+     * Needs to be closed by user.
      */
     STICKY_BALLOON(NotificationDisplayType.STICKY_BALLOON),
     /**
-     * Tool window balloon
+     * Tool window balloon.
      */
     TOOL_WINDOW(NotificationDisplayType.TOOL_WINDOW);
 

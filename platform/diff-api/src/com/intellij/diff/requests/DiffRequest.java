@@ -19,7 +19,7 @@ import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.NlsContexts;
 import com.intellij.openapi.util.UserDataHolder;
 import com.intellij.openapi.util.UserDataHolderBase;
-import org.jetbrains.annotations.CalledInAwt;
+import com.intellij.util.concurrency.annotations.RequiresEdt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -43,7 +43,7 @@ public abstract class DiffRequest implements UserDataHolder {
    * @param isAssigned true means request processing started, false means processing has stopped.
    *                   Total number of calls with true should be same as for false
    */
-  @CalledInAwt
+  @RequiresEdt
   public void onAssigned(boolean isAssigned) {
   }
 

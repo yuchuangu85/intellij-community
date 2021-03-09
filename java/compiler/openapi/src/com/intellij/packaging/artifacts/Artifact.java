@@ -20,7 +20,7 @@ import com.intellij.openapi.util.NlsSafe;
 import com.intellij.openapi.util.UserDataHolder;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.packaging.elements.CompositePackagingElement;
-import org.jetbrains.annotations.Nls;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -33,7 +33,7 @@ public interface Artifact extends UserDataHolder, ProjectModelBuildableElement {
   @NotNull
   ArtifactType getArtifactType();
 
-  @Nls(capitalization = Nls.Capitalization.Title) String getName();
+  @NlsSafe String getName();
 
   boolean isBuildOnMake();
 
@@ -43,7 +43,7 @@ public interface Artifact extends UserDataHolder, ProjectModelBuildableElement {
   @NotNull
   CompositePackagingElement<?> getRootElement();
 
-  @Nullable @NlsSafe String getOutputPath();
+  @Nullable @NonNls String getOutputPath();
 
   Collection<? extends ArtifactPropertiesProvider> getPropertiesProviders();
 
@@ -52,5 +52,5 @@ public interface Artifact extends UserDataHolder, ProjectModelBuildableElement {
   @Nullable
   VirtualFile getOutputFile();
 
-  @Nullable @NlsSafe String getOutputFilePath();
+  @Nullable @NonNls String getOutputFilePath();
 }

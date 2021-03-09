@@ -61,7 +61,6 @@ public class ExtractMethodDialog extends RefactoringDialog implements AbstractEx
   static final String EXTRACT_METHOD_DEFAULT_VISIBILITY = "extract.method.default.visibility";
   public static final String EXTRACT_METHOD_GENERATE_ANNOTATIONS = "extractMethod.generateAnnotations";
 
-  private final Project myProject;
   private final PsiType myReturnType;
   private final PsiTypeParameterList myTypeParameterList;
   private final PsiType[] myExceptions;
@@ -101,7 +100,6 @@ public class ExtractMethodDialog extends RefactoringDialog implements AbstractEx
                              @NlsContexts.DialogTitle String title, String helpId, @Nullable Nullability nullability, PsiElement[] elementsToExtract,
                              @Nullable Supplier<Integer> duplicatesCountSupplier) {
     super(project, true);
-    myProject = project;
     myTargetClass = targetClass;
     myReturnType = returnType;
     myTypeParameterList = typeParameterList;
@@ -706,7 +704,7 @@ public class ExtractMethodDialog extends RefactoringDialog implements AbstractEx
   public void show() {
     super.show();
     final FeatureUsageData featureUsageData = collectStatistics();
-    FUCounterUsageLogger.getInstance().logEvent("java.extract.method","dialog.closed", featureUsageData);
+    FUCounterUsageLogger.getInstance().logEvent(myProject, "java.extract.method","dialog.closed", featureUsageData);
   }
 
   private static final class ParameterInfo {

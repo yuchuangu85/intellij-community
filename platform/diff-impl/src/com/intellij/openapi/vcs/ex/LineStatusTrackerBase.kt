@@ -16,12 +16,14 @@
 package com.intellij.openapi.vcs.ex
 
 import com.intellij.diff.util.DiffUtil
+import com.intellij.diff.util.DiffUtil.executeWriteCommand
 import com.intellij.diff.util.Side
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.WriteThread
 import com.intellij.openapi.command.CommandProcessor
-import com.intellij.openapi.command.undo.UndoConstants
+import com.intellij.openapi.command.UndoConfirmationPolicy
+import com.intellij.openapi.command.undo.UndoUtil
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.diff.DiffBundle
 import com.intellij.openapi.editor.Document
@@ -33,8 +35,7 @@ import com.intellij.openapi.util.NlsContexts
 import com.intellij.openapi.vcs.ex.DocumentTracker.Block
 import com.intellij.openapi.vcs.ex.LineStatusTrackerBlockOperations.Companion.isSelectedByLine
 import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.annotations.CalledInAwt
-import org.jetbrains.annotations.TestOnly
+import com.intellij.util.concurrency.annotations.RequiresEdt
 import java.util.*
 
 abstract class LineStatusTrackerBase<R : Range>(
@@ -66,7 +67,7 @@ abstract class LineStatusTrackerBase<R : Range>(
   }
 
 
-  @CalledInAwt
+  @RequiresEdt
   protected open fun isDetectWhitespaceChangedLines(): Boolean = false
 
   /**
@@ -84,7 +85,7 @@ abstract class LineStatusTrackerBase<R : Range>(
     return blockOperations.getRanges()
   }
 
-  @CalledInAwt
+  @RequiresEdt
   protected fun setBaseRevision(vcsContent: CharSequence, beforeUnfreeze: (() -> Unit)?) {
     ApplicationManager.getApplication().assertIsDispatchThread()
     if (isReleased) return
@@ -103,13 +104,20 @@ abstract class LineStatusTrackerBase<R : Range>(
     }
   }
 
-  @CalledInAwt
+  @RequiresEdt
   fun dropBaseRevision() {
     ApplicationManager.getApplication().assertIsDispatchThread()
     if (isReleased) return
 
     isInitialized = false
     updateHighlighters()
+
+    documentTracker.doFrozen {
+      updateDocument(Side.LEFT) {
+        vcsDocument.setText(document.immutableCharSequence)
+        documentTracker.setFrozenState(emptyList())
+      }
+    }
   }
 
   fun release() {
@@ -129,18 +137,18 @@ abstract class LineStatusTrackerBase<R : Range>(
   }
 
 
-  @CalledInAwt
+  @RequiresEdt
   protected fun updateDocument(side: Side, task: (Document) -> Unit): Boolean {
     return updateDocument(side, null, task)
   }
 
-  @CalledInAwt
+  @RequiresEdt
   protected fun updateDocument(side: Side, commandName: String?, task: (Document) -> Unit): Boolean {
     val affectedDocument = if (side.isLeft) vcsDocument else document
     return updateDocument(project, affectedDocument, commandName, task)
   }
 
-  @CalledInAwt
+  @RequiresEdt
   override fun doFrozen(task: Runnable) {
     documentTracker.doFrozen({ task.run() })
   }
@@ -194,7 +202,7 @@ abstract class LineStatusTrackerBase<R : Range>(
       }
     }
 
-    @CalledInAwt
+    @RequiresEdt
     fun resetInnerRanges() {
       LOCK.write {
         if (isDetectWhitespaceChangedLines()) {
@@ -242,7 +250,7 @@ abstract class LineStatusTrackerBase<R : Range>(
   override fun transferLineToVcs(line: Int, approximate: Boolean): Int = blockOperations.transferLineToVcs(line, approximate)
 
 
-  @CalledInAwt
+  @RequiresEdt
   override fun rollbackChanges(range: Range) {
     val newRange = blockOperations.findBlock(range)
     if (newRange != null) {
@@ -250,12 +258,12 @@ abstract class LineStatusTrackerBase<R : Range>(
     }
   }
 
-  @CalledInAwt
+  @RequiresEdt
   override fun rollbackChanges(lines: BitSet) {
     runBulkRollback { it.isSelectedByLine(lines) }
   }
 
-  @CalledInAwt
+  @RequiresEdt
   protected fun runBulkRollback(condition: (Block) -> Boolean) {
     if (!isValid()) return
 
@@ -278,16 +286,17 @@ abstract class LineStatusTrackerBase<R : Range>(
     @JvmStatic
     protected val LOG: Logger = Logger.getInstance(LineStatusTrackerBase::class.java)
     private val VCS_DOCUMENT_KEY: Key<Boolean> = Key.create("LineStatusTrackerBase.VCS_DOCUMENT_KEY")
+    val SEPARATE_UNDO_STACK: Key<Boolean> = Key.create("LineStatusTrackerBase.SEPARATE_UNDO_STACK")
 
     fun createVcsDocument(originalDocument: Document): Document {
       val result = DocumentImpl(originalDocument.immutableCharSequence, true)
-      result.putUserData(UndoConstants.DONT_RECORD_UNDO, true)
+      UndoUtil.disableUndoFor(result)
       result.putUserData(VCS_DOCUMENT_KEY, true)
       result.setReadOnly(true)
       return result
     }
 
-    @CalledInAwt
+    @RequiresEdt
     fun updateDocument(project: Project?,
                        document: Document,
                        commandName: @NlsContexts.Command String?,
@@ -305,14 +314,13 @@ abstract class LineStatusTrackerBase<R : Range>(
         }
       }
       else {
-        return DiffUtil.executeWriteCommand(document, project, commandName) { task(document) }
+        val isSeparateUndoStack = DiffUtil.isUserDataFlagSet(SEPARATE_UNDO_STACK, document)
+        return executeWriteCommand(project, document, commandName, null, UndoConfirmationPolicy.DEFAULT, false,
+                                   !isSeparateUndoStack) { task(document) }
       }
     }
   }
 
-
-  @TestOnly
-  fun getDocumentTrackerInTestMode(): DocumentTracker = documentTracker
 
   override fun toString(): String {
     return "${javaClass.name}(file=${virtualFile?.path}, isReleased=$isReleased)@${Integer.toHexString(hashCode())}"

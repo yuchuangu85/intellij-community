@@ -14,7 +14,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import static com.intellij.psi.codeStyle.CodeStyleSettingsCustomizable.WRAP_VALUES;
-import static com.intellij.psi.codeStyle.CodeStyleSettingsCustomizableOptions.getWrapOptions;
+import static com.intellij.psi.codeStyle.CodeStyleSettingsCustomizableOptions.getInstance;
 
 /**
  * @author yole
@@ -56,31 +56,25 @@ public class PyLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSettin
                                    "SPACE_BEFORE_COMMA",
                                    "SPACE_BEFORE_SEMICOLON");
       consumer.showCustomOption(PyCodeStyleSettings.class, "SPACE_BEFORE_LBRACKET",
-                                PyBundle.message("formatter.left.bracket"),
-                                CodeStyleSettingsCustomizableOptions.SPACES_BEFORE_PARENTHESES.get());
+                                PyBundle.message("formatter.left.bracket"), getInstance().SPACES_BEFORE_PARENTHESES);
       consumer.showCustomOption(PyCodeStyleSettings.class, "SPACE_AROUND_POWER_OPERATOR",
-                                PyBundle.message("formatter.around.power.operator"),
-                                CodeStyleSettingsCustomizableOptions.SPACES_AROUND_OPERATORS.get());
+                                PyBundle.message("formatter.around.power.operator"), getInstance().SPACES_AROUND_OPERATORS);
       consumer.showCustomOption(PyCodeStyleSettings.class, "SPACE_AROUND_EQ_IN_NAMED_PARAMETER",
-                                PyBundle.message("formatter.around.eq.in.named.parameter"),
-                                CodeStyleSettingsCustomizableOptions.SPACES_AROUND_OPERATORS.get());
+                                PyBundle.message("formatter.around.eq.in.named.parameter"), getInstance().SPACES_AROUND_OPERATORS);
       consumer.showCustomOption(PyCodeStyleSettings.class, "SPACE_AROUND_EQ_IN_KEYWORD_ARGUMENT",
-                                PyBundle.message("formatter.around.eq.in.keyword.argument"),
-                                CodeStyleSettingsCustomizableOptions.SPACES_AROUND_OPERATORS.get());
+                                PyBundle.message("formatter.around.eq.in.keyword.argument"), getInstance().SPACES_AROUND_OPERATORS);
       consumer.showCustomOption(PyCodeStyleSettings.class, "SPACE_WITHIN_BRACES", PyBundle.message("formatter.braces"),
-                                CodeStyleSettingsCustomizableOptions.SPACES_WITHIN.get());
+                                getInstance().SPACES_WITHIN);
       consumer.showCustomOption(PyCodeStyleSettings.class, "SPACE_BEFORE_PY_COLON",
-                                ApplicationBundle.message("checkbox.spaces.before.colon"),
-                                CodeStyleSettingsCustomizableOptions.SPACES_OTHER.get());
+                                ApplicationBundle.message("checkbox.spaces.before.colon"), getInstance().SPACES_OTHER);
       consumer.showCustomOption(PyCodeStyleSettings.class, "SPACE_AFTER_PY_COLON",
-                                ApplicationBundle.message("checkbox.spaces.after.colon"),
-                                CodeStyleSettingsCustomizableOptions.SPACES_OTHER.get());
+                                ApplicationBundle.message("checkbox.spaces.after.colon"), getInstance().SPACES_OTHER);
       consumer.showCustomOption(PyCodeStyleSettings.class, "SPACE_BEFORE_BACKSLASH",
-                                PyBundle.message("formatter.before.backslash"), CodeStyleSettingsCustomizableOptions.SPACES_OTHER.get());
+                                PyBundle.message("formatter.before.backslash"), getInstance().SPACES_OTHER);
       consumer.showCustomOption(PyCodeStyleSettings.class, "SPACE_BEFORE_NUMBER_SIGN",
-                                PyBundle.message("formatter.before.hash"), CodeStyleSettingsCustomizableOptions.SPACES_OTHER.get());
+                                PyBundle.message("formatter.before.hash"), getInstance().SPACES_OTHER);
       consumer.showCustomOption(PyCodeStyleSettings.class, "SPACE_AFTER_NUMBER_SIGN",
-                                PyBundle.message("formatter.after.hash"), CodeStyleSettingsCustomizableOptions.SPACES_OTHER.get());
+                                PyBundle.message("formatter.after.hash"), getInstance().SPACES_OTHER);
       consumer.renameStandardOption("SPACE_AROUND_MULTIPLICATIVE_OPERATORS", PyBundle.message("formatter.around.multiplicative.operators"));
     }
     else if (settingsType == SettingsType.BLANK_LINES_SETTINGS) {
@@ -92,19 +86,24 @@ public class PyLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSettin
       consumer.renameStandardOption("BLANK_LINES_AFTER_IMPORTS", PyBundle.message("formatter.around.top.level.imports"));
 
       consumer.showCustomOption(PyCodeStyleSettings.class, "BLANK_LINES_AROUND_TOP_LEVEL_CLASSES_FUNCTIONS",
-                                PyBundle.message("formatter.around.top.level.classes.and.function"),
-                                CodeStyleSettingsCustomizableOptions.BLANK_LINES.get());
+                                PyBundle.message("formatter.around.top.level.classes.and.function"), getInstance().BLANK_LINES);
       consumer.showCustomOption(PyCodeStyleSettings.class, "BLANK_LINES_AFTER_LOCAL_IMPORTS",
-                                PyBundle.message("formatter.after.local.imports"), CodeStyleSettingsCustomizableOptions.BLANK_LINES.get());
+                                PyBundle.message("formatter.after.local.imports"), getInstance().BLANK_LINES);
       consumer.showCustomOption(PyCodeStyleSettings.class, "BLANK_LINES_BEFORE_FIRST_METHOD",
-                                PyBundle.message("formatter.before.first.method"), CodeStyleSettingsCustomizableOptions.BLANK_LINES.get());
+                                PyBundle.message("formatter.before.first.method"), getInstance().BLANK_LINES);
     }
     else if (settingsType == SettingsType.WRAPPING_AND_BRACES_SETTINGS) {
       consumer.showStandardOptions("RIGHT_MARGIN",
                                    "WRAP_ON_TYPING",
                                    "KEEP_LINE_BREAKS",
                                    "WRAP_LONG_LINES",
+                                   "CALL_PARAMETERS_WRAP",
+                                   "CALL_PARAMETERS_LPAREN_ON_NEXT_LINE",
+                                   "CALL_PARAMETERS_RPAREN_ON_NEXT_LINE",
                                    "ALIGN_MULTILINE_PARAMETERS",
+                                   "METHOD_PARAMETERS_WRAP",
+                                   "METHOD_PARAMETERS_LPAREN_ON_NEXT_LINE",
+                                   "METHOD_PARAMETERS_RPAREN_ON_NEXT_LINE",
                                    "ALIGN_MULTILINE_PARAMETERS_IN_CALLS");
       consumer.showCustomOption(PyCodeStyleSettings.class, "NEW_LINE_AFTER_COLON",
                                 PyBundle.message("formatter.single.clause.statements"),
@@ -117,7 +116,7 @@ public class PyLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSettin
                                 PyBundle.message("formatter.collections.and.comprehensions"));
 
       consumer.showCustomOption(PyCodeStyleSettings.class, "FROM_IMPORT_WRAPPING",
-                                PyBundle.message("formatter.from.import.statements"), null, getWrapOptions(), WRAP_VALUES);
+                                PyBundle.message("formatter.from.import.statements"), null, getInstance().WRAP_OPTIONS, WRAP_VALUES);
       consumer.showCustomOption(PyCodeStyleSettings.class, "ALIGN_MULTILINE_IMPORTS",
                                 PyBundle.message("formatter.align.when.multiline"),
                                 PyBundle.message("formatter.from.import.statements"));
@@ -135,14 +134,15 @@ public class PyLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSettin
                                 PyBundle.message("formatter.from.import.statements"));
 
       consumer.showCustomOption(PyCodeStyleSettings.class, "DICT_WRAPPING",
-                                PyBundle.message("formatter.dictionary.literals"), null, getWrapOptions(), WRAP_VALUES);
+                                PyBundle.message("formatter.dictionary.literals"), null, getInstance().WRAP_OPTIONS, WRAP_VALUES);
       consumer.showCustomOption(PyCodeStyleSettings.class, "DICT_NEW_LINE_AFTER_LEFT_BRACE",
                                 ApplicationBundle.message("wrapping.new.line.after.lbrace"),
                                 PyBundle.message("formatter.dictionary.literals"));
       consumer.showCustomOption(PyCodeStyleSettings.class, "DICT_NEW_LINE_BEFORE_RIGHT_BRACE",
                                 ApplicationBundle.message("wrapping.rbrace.on.new.line"),
                                 PyBundle.message("formatter.dictionary.literals"));
-      consumer.showCustomOption(PyCodeStyleSettings.class, "HANG_CLOSING_BRACKETS", PyBundle.message("formatter.hang.closing.brackets"), null);
+      consumer
+        .showCustomOption(PyCodeStyleSettings.class, "HANG_CLOSING_BRACKETS", PyBundle.message("formatter.hang.closing.brackets"), null);
     }
   }
 
@@ -161,6 +161,8 @@ public class PyLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSettin
     // e.g. in SpacingBuilder#blankLines(), and can lead to unexpected side-effects in formatter's
     // behavior
     commonSettings.KEEP_BLANK_LINES_IN_CODE = 1;
+    commonSettings.METHOD_PARAMETERS_WRAP = CommonCodeStyleSettings.WRAP_AS_NEEDED;
+    commonSettings.CALL_PARAMETERS_WRAP = CommonCodeStyleSettings.WRAP_AS_NEEDED;
   }
 
   @Nullable
@@ -172,7 +174,8 @@ public class PyLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSettin
   @NotNull
   @Override
   public CodeStyleConfigurable createConfigurable(@NotNull CodeStyleSettings baseSettings, @NotNull CodeStyleSettings modelSettings) {
-    return new CodeStyleAbstractConfigurable(baseSettings, modelSettings, "Python") {
+    return new CodeStyleAbstractConfigurable(baseSettings, modelSettings,
+                                             PyBundle.message("configurable.PyLanguageCodeStyleSettingsProvider.display.name")) {
       @Override
       protected CodeStyleAbstractPanel createPanel(final CodeStyleSettings settings) {
         return new PyCodeStyleMainPanel(getCurrentSettings(), settings);
@@ -209,12 +212,10 @@ public class PyLanguageCodeStyleSettingsProvider extends LanguageCodeStyleSettin
                                                       "\n" +
                                                       "long_expression = component_one + component_two + component_three + component_four + component_five + component_six\n" +
                                                       "\n" +
-                                                      "def xyzzy(long_parameter_1,\n" +
-                                                      "long_parameter_2):\n" +
+                                                      "def xyzzy(a1, a2, long_parameter_1, a3, a4, long_parameter_2):\n" +
                                                       "    pass\n" +
                                                       "\n" +
-                                                      "xyzzy('long_string_constant1',\n" +
-                                                      "    'long_string_constant2')\n" +
+                                                      "xyzzy(1, 2, 'long_string_constant1', 3, 4, 'long_string_constant2')\n" +
                                                       "\n" +
                                                       "xyzzy(\n" +
                                                       "    'with',\n" +

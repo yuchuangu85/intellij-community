@@ -25,6 +25,7 @@ import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.zmlx.hg4idea.HgBundle;
+import org.zmlx.hg4idea.HgProjectConfigurable;
 import org.zmlx.hg4idea.HgProjectSettings;
 import org.zmlx.hg4idea.HgVcs;
 import org.zmlx.hg4idea.action.HgCommandResultNotifier;
@@ -35,6 +36,8 @@ import org.zmlx.hg4idea.util.HgUtil;
 
 import javax.swing.event.HyperlinkEvent;
 import java.util.List;
+
+import static org.zmlx.hg4idea.HgNotificationIdsHolder.CHANGESETS_ERROR;
 
 /**
  * Common ancestor for HgIncomingCommand and HgOutgoingCommand - changeset commands which need connection to the server.
@@ -77,14 +80,16 @@ public abstract class HgRemoteChangesetsCommand extends HgChangesetsCommand {
       if (vcs == null) {
         return result;
       }
-      new HgCommandResultNotifier(project).notifyError(result, HgBundle.message("hg4idea.changesets.error"),
+      new HgCommandResultNotifier(project).notifyError(CHANGESETS_ERROR,
+                                                       result,
+                                                       HgBundle.message("hg4idea.changesets.error"),
                                                        HgBundle.message("hg4idea.changesets.error.msg", repositoryURL),
                                                        new NotificationListener() {
                                                          @Override
                                                          public void hyperlinkUpdate(@NotNull Notification notification,
                                                                                      @NotNull HyperlinkEvent event) {
                                                            ShowSettingsUtil.getInstance()
-                                                             .showSettingsDialog(project, vcs.getConfigurable().getDisplayName());
+                                                             .showSettingsDialog(project, HgProjectConfigurable.getDISPLAY_NAME());
                                                          }
                                                        });
       final HgProjectSettings projectSettings = vcs.getProjectSettings();

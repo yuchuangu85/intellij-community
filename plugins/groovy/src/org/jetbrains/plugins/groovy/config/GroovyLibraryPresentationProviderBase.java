@@ -22,9 +22,14 @@ public abstract class GroovyLibraryPresentationProviderBase extends LibraryPrese
   }
 
   @Override
-  public @Nls String getDescription(@NotNull GroovyLibraryProperties properties) {
+  public String getDescription(@NotNull GroovyLibraryProperties properties) {
     final String version = properties.getVersion();
-    return GroovyBundle.message("library.presentation.provider.description", getLibraryCategoryName(), version, version != null ? 0 : 1);
+    if (version == null) {
+      return GroovyBundle.message("framework.0.library", getLibraryCategoryName());
+    }
+    else {
+      return GroovyBundle.message("framework.0.library.version.1", getLibraryCategoryName(), version);
+    }
   }
 
   @Override

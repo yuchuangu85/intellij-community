@@ -86,7 +86,7 @@ public class ExtractMethodProcessor implements MatchProvider {
 
   private PsiElement myCodeFragmentMember; // parent of myCodeFragment
 
-  protected @NonNls String myMethodName; // name for extracted method
+  protected @NlsSafe String myMethodName; // name for extracted method
   protected PsiType myReturnType; // return type for extracted method
   protected PsiTypeParameterList myTypeParameterList; //type parameter list of extracted method
   protected VariableData[] myVariableDatum; // parameter data for extracted method
@@ -237,7 +237,7 @@ public class ExtractMethodProcessor implements MatchProvider {
     }
     if (myCodeFragmentMember == null) {
       PsiElement context = codeFragment.getContext();
-      LOG.assertTrue(context != null, "code fragment context is null");
+      LOG.assertTrue(context != null, "code fragment context is null: " + codeFragment.getClass());
       myCodeFragmentMember = ControlFlowUtil.findCodeFragment(context).getParent();
     }
 
@@ -786,12 +786,11 @@ public class ExtractMethodProcessor implements MatchProvider {
   @TestOnly
   public void testRun() throws IncorrectOperationException {
     testPrepare();
-    testNullability();
+    prepareNullability();
     ExtractMethodHandler.extractMethod(myProject, this);
   }
 
-  @TestOnly
-  public void testNullability() {
+  public void prepareNullability() {
     myNullability = initNullability();
   }
 
@@ -800,7 +799,7 @@ public class ExtractMethodProcessor implements MatchProvider {
     prepareVariablesAndName();
   }
 
-  protected void prepareVariablesAndName(){
+  public void prepareVariablesAndName(){
     myInputVariables.setFoldingAvailable(myInputVariables.isFoldingSelectedByDefault());
     myMethodName = myInitialMethodName;
     myVariableDatum = new VariableData[myInputVariables.getInputVariables().size()];
@@ -809,8 +808,7 @@ public class ExtractMethodProcessor implements MatchProvider {
     }
   }
 
-  @TestOnly
-  public void testTargetClass(PsiClass targetClass) {
+  public void setTargetClass(@Nullable PsiClass targetClass) {
     if (targetClass != null) {
       myTargetClass = targetClass;
       myNeedChangeContext = true;
@@ -1307,6 +1305,7 @@ public class ExtractMethodProcessor implements MatchProvider {
     return myDuplicates;
   }
 
+  @Nullable
   public ParametrizedDuplicates getParametrizedDuplicates() {
     return myParametrizedDuplicates;
   }
@@ -1883,7 +1882,7 @@ public class ExtractMethodProcessor implements MatchProvider {
     if (!shouldAcceptCurrentTarget(extractPass, myTargetClass)) {
 
       final LinkedHashMap<PsiClass, List<PsiVariable>> classes = new LinkedHashMap<>();
-      final PsiElementProcessor<PsiClass> processor = new PsiElementProcessor<PsiClass>() {
+      final PsiElementProcessor<PsiClass> processor = new PsiElementProcessor<>() {
         @Override
         public boolean execute(@NotNull PsiClass selectedClass) {
           AnonymousTargetClassPreselectionUtil.rememberSelection(selectedClass, myTargetClass);
@@ -2144,6 +2143,7 @@ public class ExtractMethodProcessor implements MatchProvider {
   }
 
   protected @NlsContexts.DialogMessage String buildMultipleOutputMessageError(PsiType expressionType) {
+    @Nls
     StringBuilder buffer = new StringBuilder();
     buffer.append(RefactoringBundle.getCannotRefactorMessage(
       JavaRefactoringBundle.message("there.are.multiple.output.values.for.the.selected.code.fragment")));
@@ -2175,6 +2175,10 @@ public class ExtractMethodProcessor implements MatchProvider {
 
   public PsiMethod getExtractedMethod() {
     return myExtractedMethod;
+  }
+
+  public void setExtractedMethod(PsiMethod method){
+    myExtractedMethod = method;
   }
 
   public void setMethodName(String methodName) {
@@ -2337,6 +2341,10 @@ public class ExtractMethodProcessor implements MatchProvider {
     return myStatic;
   }
 
+  public void setStatic(boolean shouldBeStatic){
+    myStatic = shouldBeStatic;
+  }
+
   public boolean isCanBeStatic() {
     return myCanBeStatic;
   }
@@ -2350,6 +2358,7 @@ public class ExtractMethodProcessor implements MatchProvider {
     return myProject;
   }
 
+  @NlsSafe
   public String getMethodName() {
     return myMethodName;
   }

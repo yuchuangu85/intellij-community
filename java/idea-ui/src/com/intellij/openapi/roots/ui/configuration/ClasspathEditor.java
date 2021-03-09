@@ -32,9 +32,11 @@ import com.intellij.openapi.roots.ui.configuration.classpath.ClasspathPanelImpl;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.NlsContexts;
+import com.intellij.openapi.util.NlsSafe;
 import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.ui.JBUI;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -48,6 +50,7 @@ public class ClasspathEditor extends ModuleElementsEditor implements ModuleRootL
    * @deprecated Use {@link #getName()} instead
    */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.2")
   public static final String NAME = "Dependencies";
 
   private ClasspathPanelImpl myPanel;
@@ -72,7 +75,7 @@ public class ClasspathEditor extends ModuleElementsEditor implements ModuleRootL
   }
 
   @Override
-  public @NlsContexts.ConfigurableName String getDisplayName() {
+  public String getDisplayName() {
     return getName();
   }
 
@@ -104,7 +107,7 @@ public class ClasspathEditor extends ModuleElementsEditor implements ModuleRootL
     panel.add(myPanel, BorderLayout.CENTER);
 
     final ModuleJdkConfigurable jdkConfigurable =
-      new ModuleJdkConfigurable(this, ProjectStructureConfigurable.getInstance(myProject).getProjectJdksModel()) {
+      new ModuleJdkConfigurable(this, ((ModulesConfigurator)getState().getModulesProvider()).getProjectStructureConfigurable()) {
         @Override
         protected ModifiableRootModel getRootModel() {
           return getModifiableModel();
@@ -124,7 +127,7 @@ public class ClasspathEditor extends ModuleElementsEditor implements ModuleRootL
   }
 
   private ModifiableRootModel getModifiableModel() {
-    return getState().getRootModel();
+    return getState().getModifiableRootModel();
   }
 
   public void selectOrderEntry(@NotNull final OrderEntry entry) {
@@ -189,7 +192,8 @@ public class ClasspathEditor extends ModuleElementsEditor implements ModuleRootL
     }
 
     private @NlsContexts.Label String getModuleClasspathFormat() {
-      return ClassPathStorageUtil.getStorageType(myState.getRootModel().getModule());
+      @NlsSafe final String type = ClassPathStorageUtil.getStorageType(myState.getCurrentRootModel().getModule());
+      return type;
     }
 
     private boolean isModified() {
@@ -199,13 +203,13 @@ public class ClasspathEditor extends ModuleElementsEditor implements ModuleRootL
     public void canApply() throws ConfigurationException {
       ClasspathStorageProvider provider = ClasspathStorage.getProvider(getSelectedClasspathFormat());
       if (provider != null) {
-        provider.assertCompatible(myState.getRootModel());
+        provider.assertCompatible(myState.getCurrentRootModel());
       }
     }
 
     private void apply() throws ConfigurationException {
       canApply();
-      ClasspathStorage.setStorageType(myState.getRootModel(), getSelectedClasspathFormat());
+      ClasspathStorage.setStorageType(myState.getCurrentRootModel(), getSelectedClasspathFormat());
     }
   }
 

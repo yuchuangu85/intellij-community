@@ -1,22 +1,22 @@
 // Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
-
 package com.intellij.application.options;
 
 import com.intellij.application.options.codeStyle.CodeStyleSchemesModel;
 import com.intellij.application.options.codeStyle.excludedFiles.ExcludedFilesList;
 import com.intellij.lang.Language;
 import com.intellij.openapi.application.ApplicationBundle;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.editor.highlighter.EditorHighlighter;
 import com.intellij.openapi.editor.highlighter.EditorHighlighterFactory;
 import com.intellij.openapi.extensions.ExtensionPointListener;
+import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.extensions.PluginDescriptor;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.FileTypes;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.ex.ConfigurableWrapper;
-import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.MessageType;
 import com.intellij.openapi.ui.VerticalFlowLayout;
@@ -50,7 +50,9 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
-public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
+final class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
+  private static final ExtensionPointName<GeneralCodeStyleOptionsProviderEP> EP_NAME = new ExtensionPointName<>("com.intellij.generalCodeStyleOptionsProvider");
+
   @SuppressWarnings("UnusedDeclaration")
   private static final Logger LOG = Logger.getInstance(GeneralCodeStylePanel.class);
   private List<GeneralCodeStyleOptionsProvider> myAdditionalOptions;
@@ -126,8 +128,8 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
       //noinspection AssignmentToStaticFieldFromInstanceMethod
       ourSelectedTabIndex = myTabbedPane.getSelectedIndex();
     });
-    GeneralCodeStyleOptionsProviderEP.EP_NAME.addExtensionPointListener(
-      new ExtensionPointListener<GeneralCodeStyleOptionsProviderEP>() {
+    EP_NAME.addExtensionPointListener(
+      new ExtensionPointListener<>() {
         @Override
         public void extensionAdded(@NotNull GeneralCodeStyleOptionsProviderEP extension,
                                    @NotNull PluginDescriptor pluginDescriptor) {
@@ -144,7 +146,7 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
 
   private void updateGeneralOptionsPanel() {
     myAdditionalSettingsPanel.removeAll();
-    myAdditionalOptions = ConfigurableWrapper.createConfigurables(GeneralCodeStyleOptionsProviderEP.EP_NAME);
+    myAdditionalOptions = ConfigurableWrapper.createConfigurables(EP_NAME);
     for (GeneralCodeStyleOptionsProvider provider : myAdditionalOptions) {
       JComponent generalSettingsComponent = provider.createComponent();
       if (generalSettingsComponent != null) {
@@ -202,7 +204,9 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
 
   private void createUIComponents() {
     myRightMarginField = new IntegerField(ApplicationBundle.message("editbox.right.margin.columns"), 0, CodeStyleConstraints.MAX_RIGHT_MARGIN);
-    myVisualGuides = new CommaSeparatedIntegersField(ApplicationBundle.message("settings.code.style.visual.guides"), 0, CodeStyleConstraints.MAX_RIGHT_MARGIN, "Optional");
+    myVisualGuides = new CommaSeparatedIntegersField(ApplicationBundle.message("settings.code.style.visual.guides"),
+                                                     0, CodeStyleConstraints.MAX_RIGHT_MARGIN,
+                                                     ApplicationBundle.message("settings.code.style.visual.guides.optional"));
     myExcludedFilesList = new ExcludedFilesList();
   }
 
@@ -347,7 +351,7 @@ public class GeneralCodeStylePanel extends CodeStyleAbstractPanel {
     final Point p = new Point(0, rect.height);
     final RelativePoint point = new RelativePoint(field, p);
     balloon.show(point, Balloon.Position.below);
-    Disposer.register(ProjectManager.getInstance().getDefaultProject(), balloon);
+    Disposer.register(ApplicationManager.getApplication(), balloon);
   }
 
   @Override

@@ -50,6 +50,10 @@ class OverrideImplementTest extends LightJavaCodeInsightFixtureTestCase {
   void testMultipleSuperMethodsThroughGenerics() { doTest(true) }
 
   void testDoNotImplementExtensionMethods() { doTest(true) }
+  
+  void testExtensionMethods1() { doTest(true) }
+
+  void testExtensionMethods2() { doTest(true) }
 
   void testSkipUnknownAnnotations() { doTest(true) }
 
@@ -251,7 +255,7 @@ class Test implements A {
 
       class C implements I {
           @Override
-          public @TA List<@TA String> i(@TA String p1, @TA(1) int @TA(2) [] @TA(3) [] p2) throws @TA IllegalArgumentException {
+          public @TA List<@TA String> i(@TA String p1, @TA(1) int @TA(3) [] @TA(2) [] p2) throws @TA IllegalArgumentException {
               return null;
           }
       }""".stripIndent()

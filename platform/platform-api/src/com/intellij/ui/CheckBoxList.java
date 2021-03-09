@@ -3,6 +3,7 @@ package com.intellij.ui;
 
 import com.intellij.openapi.util.NlsContexts;
 import com.intellij.ui.components.JBList;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.ui.speedSearch.SpeedSearchSupply;
 import com.intellij.util.Function;
 import com.intellij.util.ObjectUtils;
@@ -162,7 +163,7 @@ public class CheckBoxList<T> extends JBList<JCheckBox> {
     }
     if (icon == null) {
       // com.intellij.ide.ui.laf.darcula.ui.DarculaCheckBoxUI.getDefaultIcon()
-      icon = JBUI.scale(EmptyIcon.create(20));
+      icon = JBUIScale.scaleIcon(EmptyIcon.create(20));
     }
     Insets margin = checkBox.getMargin();
     return new Dimension(margin.left + icon.getIconWidth(), margin.top + icon.getIconHeight());
@@ -246,7 +247,7 @@ public class CheckBoxList<T> extends JBList<JCheckBox> {
   public void setItems(final List<? extends T> items, @Nullable Function<? super T, @NlsContexts.Checkbox String> converter) {
     clear();
     for (T item : items) {
-      String text = converter != null ? converter.fun(item) : item.toString();
+      @SuppressWarnings("HardCodedStringLiteral") String text = converter != null ? converter.fun(item) : item.toString();
       addItem(item, text, false);
     }
   }

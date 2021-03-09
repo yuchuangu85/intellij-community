@@ -1,39 +1,47 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.workspaceModel.storage.impl
 
-import com.google.common.cache.Cache
-import com.google.common.cache.CacheBuilder
+import com.github.benmanes.caffeine.cache.Cache
+import com.github.benmanes.caffeine.cache.Caffeine
 import com.intellij.workspaceModel.storage.*
 import java.util.concurrent.atomic.AtomicReference
 
 internal class ValuesCache {
-  private val cachedValues: Cache<CachedValue<*>, Any?> = CacheBuilder.newBuilder().build()
+  private val cachedValues: Cache<CachedValue<*>, Any?> = Caffeine.newBuilder().build()
   private val cachedValuesWithParameter: Cache<Pair<CachedValueWithParameter<*, *>, *>, Any?> =
-    CacheBuilder.newBuilder().build()
+    Caffeine.newBuilder().build()
 
   fun <R> cachedValue(value: CachedValue<R>, storage: WorkspaceEntityStorage): R {
-    if (storage is WorkspaceEntityStorageBuilder) error("storage must be immutable")
+    if (storage is WorkspaceEntityStorageBuilder) {
+      error("storage must be immutable")
+    }
+
     val o = cachedValues.getIfPresent(value)
+    // recursive update - loading get cannot be used
     if (o != null) {
       @Suppress("UNCHECKED_CAST")
       return o as R
     }
     else {
-      val newValue = value.source(storage)
+      val newValue = value.source(storage)!!
       cachedValues.put(value, newValue)
       return newValue
     }
   }
 
   fun <P, R> cachedValue(value: CachedValueWithParameter<P, R>, parameter: P, storage: WorkspaceEntityStorage): R {
-    if (storage is WorkspaceEntityStorageBuilder) error("storage must be immutable")
+    if (storage is WorkspaceEntityStorageBuilder) {
+      error("storage must be immutable")
+    }
+
+    // recursive update - loading get cannot be used
     val o = cachedValuesWithParameter.getIfPresent(value to parameter)
     if (o != null) {
       @Suppress("UNCHECKED_CAST")
       return o as R
     }
     else {
-      val newValue = value.source(storage, parameter)
+      val newValue = value.source(storage, parameter)!!
       cachedValuesWithParameter.put(value to parameter, newValue)
       return newValue
     }
@@ -51,29 +59,13 @@ internal class ValuesCache {
 class VersionedEntityStorageOnBuilder(private val builder: WorkspaceEntityStorageBuilder) : VersionedEntityStorage {
   private val currentSnapshot: AtomicReference<StorageSnapshotCache> = AtomicReference()
   private val valuesCache: ValuesCache
-    get() {
-      val snapshotCache = currentSnapshot.get()
-      if (snapshotCache == null || builder.modificationCount != snapshotCache.storageVersion) {
-        val cache = ValuesCache()
-        currentSnapshot.set(StorageSnapshotCache(builder.modificationCount, cache, builder.toStorage()))
-        return cache
-      }
-      return snapshotCache.cache
-    }
+    get() = getCurrentSnapshot().cache
 
   override val version: Long
     get() = builder.modificationCount
 
   override val current: WorkspaceEntityStorage
-    get() {
-      val snapshotCache = currentSnapshot.get()
-      if (snapshotCache == null || builder.modificationCount != snapshotCache.storageVersion) {
-        val snapshot = builder.toStorage()
-        currentSnapshot.set(StorageSnapshotCache(builder.modificationCount, ValuesCache(), snapshot))
-        return snapshot
-      }
-      return snapshotCache.storage
-    }
+    get() = getCurrentSnapshot().storage
 
   override fun <R> cachedValue(value: CachedValue<R>): R = valuesCache.cachedValue(value, current)
 
@@ -83,6 +75,16 @@ class VersionedEntityStorageOnBuilder(private val builder: WorkspaceEntityStorag
   override fun <R> clearCachedValue(value: CachedValue<R>) = valuesCache.clearCachedValue(value)
   override fun <P, R> clearCachedValue(value: CachedValueWithParameter<P, R>, parameter: P) =
     valuesCache.clearCachedValue(value, parameter)
+
+  private fun getCurrentSnapshot(): StorageSnapshotCache {
+    val snapshotCache = currentSnapshot.get()
+    if (snapshotCache == null || builder.modificationCount != snapshotCache.storageVersion) {
+      val storageSnapshotCache = StorageSnapshotCache(builder.modificationCount, ValuesCache(), builder.toStorage())
+      currentSnapshot.set(storageSnapshotCache)
+      return storageSnapshotCache
+    }
+    return snapshotCache
+  }
 }
 
 class VersionedEntityStorageOnStorage(private val storage: WorkspaceEntityStorage) : VersionedEntityStorage {
@@ -140,6 +142,9 @@ open class VersionedEntityStorageImpl(initialStorage: WorkspaceEntityStorage) : 
   override val version: Long
     get() = currentPointer.version
 
+  val pointer: Current
+    get() = currentPointer
+
   override fun <R> cachedValue(value: CachedValue<R>): R =
     valuesCache.cachedValue(value, current)
 
@@ -150,7 +155,7 @@ open class VersionedEntityStorageImpl(initialStorage: WorkspaceEntityStorage) : 
   override fun <P, R> clearCachedValue(value: CachedValueWithParameter<P, R>, parameter: P) =
     valuesCache.clearCachedValue(value, parameter)
 
-  private class Current(val version: Long, val storage: WorkspaceEntityStorage)
+  class Current(val version: Long, val storage: WorkspaceEntityStorage)
 
   @Volatile
   private var currentPointer: Current = Current(0, initialStorage)

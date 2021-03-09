@@ -6,9 +6,11 @@ import com.intellij.ide.projectView.BaseProjectTreeBuilder;
 import com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode;
 import com.intellij.ide.ui.customization.CustomizationUtil;
 import com.intellij.ide.util.treeView.*;
+import com.intellij.lang.LangBundle;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.ActionPlaces;
 import com.intellij.openapi.actionSystem.IdeActions;
+import com.intellij.openapi.actionSystem.impl.ActionMenu;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.TextAttributesKey;
 import com.intellij.openapi.editor.markup.TextAttributes;
@@ -33,11 +35,15 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
+import javax.swing.event.TreeSelectionEvent;
+import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -55,9 +61,7 @@ public abstract class AbstractProjectViewPSIPane extends AbstractProjectViewPane
   @Override
   public JComponent createComponent() {
     if (myComponent != null) {
-      if (myTree != null) {
-        myTree.updateUI();
-      }
+      SwingUtilities.updateComponentTreeUI(myComponent);
       return myComponent;
     }
 
@@ -68,7 +72,7 @@ public abstract class AbstractProjectViewPSIPane extends AbstractProjectViewPane
     myComponent = ScrollPaneFactory.createScrollPane(myTree);
     if (Registry.is("error.stripe.enabled")) {
       ErrorStripePainter painter = new ErrorStripePainter(true);
-      Disposer.register(this, new TreeUpdater<ErrorStripePainter>(painter, myComponent, myTree) {
+      Disposer.register(this, new TreeUpdater<>(painter, myComponent, myTree) {
         @Override
         protected void update(ErrorStripePainter painter, int index, Object object) {
           if (object instanceof DefaultMutableTreeNode) {
@@ -132,6 +136,18 @@ public abstract class AbstractProjectViewPSIPane extends AbstractProjectViewPane
 
   private void initTree() {
     myTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
+    myTree.getSelectionModel().addTreeSelectionListener(e -> onSelectionChanged());
+    myTree.addFocusListener(new FocusListener() {
+      @Override
+      public void focusGained(FocusEvent e) {
+        onSelectionChanged();
+      }
+
+      @Override
+      public void focusLost(FocusEvent e) {
+        onSelectionChanged();
+      }
+    });
     myTree.setRootVisible(false);
     myTree.setShowsRootHandles(true);
     myTree.expandPath(new TreePath(myTree.getModel().getRoot()));
@@ -146,6 +162,12 @@ public abstract class AbstractProjectViewPSIPane extends AbstractProjectViewPane
 
     myTree.addKeyListener(new PsiCopyPasteManager.EscapeHandler());
     CustomizationUtil.installPopupHandler(myTree, IdeActions.GROUP_PROJECT_VIEW_POPUP, ActionPlaces.PROJECT_VIEW_POPUP);
+  }
+
+  protected void onSelectionChanged() {
+    int count = myTree.getSelectionModel().getSelectionCount();
+    String description = count > 1 && myTree.hasFocus() ? LangBundle.message("project.view.elements.selected", count) : null;
+    ActionMenu.showDescriptionInStatusBar(true, myTree, description);
   }
 
   @NotNull

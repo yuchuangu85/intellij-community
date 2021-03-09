@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.roots.ui.configuration;
 
 import com.intellij.facet.impl.ProjectFacetsConfigurator;
@@ -23,7 +23,7 @@ import com.intellij.ui.navigation.History;
 import com.intellij.ui.navigation.Place;
 import com.intellij.util.EventDispatcher;
 import com.intellij.util.containers.ContainerUtil;
-import gnu.trove.THashSet;
+import com.intellij.workspaceModel.storage.WorkspaceEntityStorageBuilder;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -50,7 +50,7 @@ public abstract class ModuleEditor implements Place.Navigator, Disposable {
   private ModificationOfImportedModelWarningComponent myModificationOfImportedModelWarningComponent;
   private ModifiableRootModel myModifiableRootModel; // important: in order to correctly update OrderEntries UI use corresponding proxy for the model
 
-  private final ModulesProvider myModulesProvider;
+  private final ModulesConfigurator myModulesProvider;
   private String myName;
   private final Module myModule;
 
@@ -63,8 +63,7 @@ public abstract class ModuleEditor implements Place.Navigator, Disposable {
 
   protected History myHistory;
 
-  public ModuleEditor(Project project, ModulesProvider modulesProvider,
-                      @NotNull Module module) {
+  public ModuleEditor(@NotNull Project project, @NotNull ModulesConfigurator modulesProvider, @NotNull Module module) {
     myProject = project;
     myModulesProvider = modulesProvider;
     myModule = module;
@@ -73,13 +72,6 @@ public abstract class ModuleEditor implements Place.Navigator, Disposable {
 
   public void init(History history) {
     myHistory = history;
-
-    for (ModuleConfigurationEditor each : myEditors) {
-      if (each instanceof ModuleElementsEditor) {
-        ((ModuleElementsEditor)each).setHistory(myHistory);
-      }
-    }
-
     restoreSelectedEditor();
   }
 
@@ -125,7 +117,8 @@ public abstract class ModuleEditor implements Place.Navigator, Disposable {
     if (myModifiableRootModel == null) {
       final Module module = getModule();
       if (module != null) {
-        myModifiableRootModel = ModuleRootManagerEx.getInstanceEx(module).getModifiableModelForMultiCommit(new UIRootConfigurationAccessor(myProject));
+        WorkspaceEntityStorageBuilder builder = myModulesProvider.getWorkspaceEntityStorageBuilder();
+        myModifiableRootModel = ModuleRootManagerEx.getInstanceEx(module).getModifiableModelForMultiCommit(new UIRootConfigurationAccessor(myProject, builder));
       }
     }
     return myModifiableRootModel;
@@ -158,6 +151,9 @@ public abstract class ModuleEditor implements Place.Navigator, Disposable {
   }
 
   public boolean isModified() {
+    if (!myModule.getName().equals(myName)) {
+      return true;
+    }
     for (ModuleConfigurationEditor moduleElementsEditor : myEditors) {
       if (moduleElementsEditor.isModified()) {
         return true;
@@ -223,8 +219,13 @@ public abstract class ModuleEditor implements Place.Navigator, Disposable {
   public ModuleConfigurationState createModuleConfigurationState() {
     return new ModuleConfigurationStateImpl(myProject, myModulesProvider) {
       @Override
-      public ModifiableRootModel getRootModel() {
+      public ModifiableRootModel getModifiableRootModel() {
         return getModifiableRootModelProxy();
+      }
+
+      @Override
+      public ModuleRootModel getCurrentRootModel() {
+        return ModuleEditor.this.getRootModel();
       }
 
       @Override
@@ -387,7 +388,7 @@ public abstract class ModuleEditor implements Place.Navigator, Disposable {
 
   private class LibraryTableInvocationHandler implements InvocationHandler, ProxyDelegateAccessor {
     private final LibraryTable myDelegateTable;
-    @NonNls private final Set<String> myCheckedNames = new THashSet<>(Collections.singletonList("removeLibrary" /*,"createLibrary"*/));
+    @NonNls private final Set<String> myCheckedNames = new HashSet<>(Collections.singletonList("removeLibrary" /*,"createLibrary"*/));
 
     LibraryTableInvocationHandler(@NotNull LibraryTable table) {
       myDelegateTable = table;
@@ -567,6 +568,7 @@ public abstract class ModuleEditor implements Place.Navigator, Disposable {
 
   public void setModuleName(@NotNull String name) {
     myName = name;
+    updateImportedModelWarning();
   }
 
   private class ModuleEditorPanel extends JPanel implements DataProvider{

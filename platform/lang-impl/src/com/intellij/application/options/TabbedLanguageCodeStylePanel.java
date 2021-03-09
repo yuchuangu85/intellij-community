@@ -1,4 +1,4 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options;
 
 import com.intellij.application.options.codeStyle.CodeStyleBlankLinesPanel;
@@ -50,7 +50,6 @@ import java.util.*;
 /**
  * @author Rustam Vishnyakov
  */
-
 public abstract class TabbedLanguageCodeStylePanel extends CodeStyleAbstractPanel {
   private CodeStyleAbstractPanel myActiveTab;
   private List<CodeStyleAbstractPanel> myTabs;
@@ -67,7 +66,7 @@ public abstract class TabbedLanguageCodeStylePanel extends CodeStyleAbstractPane
     super(language, currentSettings, settings);
     myPredefinedCodeStyles = getPredefinedStyles();
     CodeStyleSettingsProvider.EXTENSION_POINT_NAME.addExtensionPointListener(
-      new ExtensionPointListener<CodeStyleSettingsProvider>() {
+      new ExtensionPointListener<>() {
         @Override
         public void extensionAdded(@NotNull CodeStyleSettingsProvider extension,
                                    @NotNull PluginDescriptor pluginDescriptor) {
@@ -81,7 +80,7 @@ public abstract class TabbedLanguageCodeStylePanel extends CodeStyleAbstractPane
                                      @NotNull PluginDescriptor pluginDescriptor) {
           if (!extension.hasSettingsPage() && getDefaultLanguage() == extension.getLanguage()) {
             final String tabTitle = extension.getConfigurableDisplayName();
-            for (int i = 0; i < myTabbedPane.getTabCount(); i ++) {
+            for (int i = 0; i < myTabbedPane.getTabCount(); i++) {
               if (myTabbedPane.getTitleAt(i).equals(tabTitle)) {
                 myTabbedPane.removeTabAt(i);
                 myTabs.stream().filter(
@@ -556,19 +555,12 @@ public abstract class TabbedLanguageCodeStylePanel extends CodeStyleAbstractPane
     }
   }
 
-  @NotNull
   @Override
-  public OptionsContainingConfigurable getOptionIndexer() {
+  public @NotNull OptionsContainingConfigurable getOptionIndexer() {
     return new OptionsContainingConfigurable() {
-      @NotNull
-      @Override
-      public Set<String> processListOptions() {
-        return Collections.emptySet();
-      }
-
       @Override
       public @NotNull Map<String, Set<String>> processListOptionsWithPaths() {
-        final Map<String,Set<String>> result = new HashMap<>();
+        final Map<String, Set<String>> result = new HashMap<>();
         for (CodeStyleAbstractPanel tab : myTabs) {
           result.put(tab.getTabTitle(), tab.processListOptions());
         }
@@ -580,18 +572,8 @@ public abstract class TabbedLanguageCodeStylePanel extends CodeStyleAbstractPane
   //========================================================================================================================================
 
   protected class MyIndentOptionsWrapper extends CodeStyleAbstractPanel {
-
     private final IndentOptionsEditor myEditor;
     private final JPanel myTopPanel = new JPanel(new BorderLayout());
-
-    /**
-     * @deprecated Use {@link #MyIndentOptionsWrapper(CodeStyleSettings, IndentOptionsEditor)}
-     */
-    @SuppressWarnings("unused")
-    @Deprecated
-    protected MyIndentOptionsWrapper(CodeStyleSettings settings, LanguageCodeStyleSettingsProvider provider, IndentOptionsEditor editor) {
-      this(settings, editor);
-    }
 
     protected MyIndentOptionsWrapper(CodeStyleSettings settings, IndentOptionsEditor editor) {
       super(settings);

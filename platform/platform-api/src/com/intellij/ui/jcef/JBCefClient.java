@@ -1,10 +1,9 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.jcef;
 
 import com.intellij.application.options.RegistryManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Disposer;
-import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.Ref;
 import com.intellij.ui.jcef.JBCefJSQuery.JSQueryFunc;
 import com.intellij.util.ObjectUtils;
@@ -17,10 +16,10 @@ import org.cef.callback.*;
 import org.cef.handler.*;
 import org.cef.misc.BoolRef;
 import org.cef.network.CefRequest;
-import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.beans.PropertyChangeListener;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -36,7 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 // [tav]: todo: think if we need some more sophisticated way to handle results of sequence of handles (like foldResults() callback)
 @SuppressWarnings({"unused", "UnusedReturnValue"}) // [tav] todo: remove it ( or add*Handler methods not yet used)
-public class JBCefClient implements JBCefDisposable {
+public final class JBCefClient implements JBCefDisposable {
   private static final Logger LOG = Logger.getInstance(JBCefClient.class);
 
   /**
@@ -48,18 +47,18 @@ public class JBCefClient implements JBCefDisposable {
    * requested via this property. The property should be added to a client before the first browser associated
    * with the client is added to a UI hierarchy, otherwise it will have no effect.
    *
-   * @see #addProperty(String, Object)
+   * @see #setProperty(String, Object)
    */
-  @ApiStatus.Experimental
-  public static final String JBCEFCLIENT_JSQUERY_POOL_SIZE_PROP = "JBCefClient.JSQuery.poolSize";
+  @NotNull public static final String JS_QUERY_POOL_SIZE = "JBCefClient.JSQuery.poolSize";
+
+  @NotNull private final PropertyChangeHelper myPropertyChangeHelper = new PropertyChangeHelper();
 
   private static final int JS_QUERY_SLOT_POOL_DEF_SIZE = RegistryManager.getInstance().intValue("ide.browser.jcef.jsQueryPoolSize");
   private static final int JS_QUERY_SLOT_POOL_MAX_SIZE = 10000;
 
   @NotNull private final CefClient myCefClient;
   @NotNull private final DisposeHelper myDisposeHelper = new DisposeHelper();
-  @NotNull private final Map<String, Object> myProperties = Collections.synchronizedMap(new HashMap<>());
-  @Nullable private JSQueryPool myJSQueryPool;
+  @Nullable private volatile JSQueryPool myJSQueryPool;
   @NotNull private final AtomicInteger myJSQueryCounter = new AtomicInteger(0);
 
   private final HandlerSupport<CefContextMenuHandler> myContextMenuHandler = new HandlerSupport<>();
@@ -77,6 +76,22 @@ public class JBCefClient implements JBCefDisposable {
   JBCefClient(@NotNull CefClient client) {
     myCefClient = client;
     Disposer.register(JBCefApp.getInstance().getDisposable(), this);
+
+    Runnable createPool = () -> {
+      if (myJSQueryPool != null) {
+        LOG.warn("JSQueryPool has already been created, this request will be ignored");
+        return;
+      }
+      myJSQueryPool = JSQueryPool.create(this);
+    };
+    addPropertyChangeListener(JS_QUERY_POOL_SIZE, evt -> {
+      if (evt.getNewValue() != null) {
+        createPool.run();
+      }
+    });
+    if (JS_QUERY_SLOT_POOL_DEF_SIZE > 0) {
+      createPool.run();
+    }
   }
 
   @NotNull
@@ -104,37 +119,44 @@ public class JBCefClient implements JBCefDisposable {
   /**
    * Supports the following properties:
    * <ul>
-   * <li> {@link #JBCEFCLIENT_JSQUERY_POOL_SIZE_PROP}
+   * <li> {@link #JS_QUERY_POOL_SIZE}
    * </ul>
+   *
+   * @throws IllegalArgumentException if the value has wrong type or format
    */
-  public void addProperty(@NotNull String name, @NotNull Object value) {
-    myProperties.put(name, value);
+  public void setProperty(@NotNull String name, @Nullable Object value) {
+    if (JS_QUERY_POOL_SIZE.equals(name) && !(value instanceof Integer)) {
+      throw new IllegalArgumentException("JBCefClient.JS_QUERY_POOL_SIZE should be java.lang.Integer");
+    }
+    myPropertyChangeHelper.setProperty(name, value);
   }
 
   /**
-   * @see #addProperty(String, Object)
-   */
-  public void removeProperty(@NotNull String name) {
-    myProperties.remove(name);
-  }
-
-  /**
-   * @see #addProperty(String, Object)
+   * @see #setProperty(String, Object)
    */
   @Nullable
   public Object getProperty(@NotNull String name) {
-    return myProperties.get(name);
+    return myPropertyChangeHelper.getProperty(name);
+  }
+
+  /**
+   * @see #setProperty(String, Object)
+   */
+  @SuppressWarnings("SameParameterValue")
+  void addPropertyChangeListener(@NotNull String name, @NotNull PropertyChangeListener listener) {
+    myPropertyChangeHelper.addPropertyChangeListener(name, listener);
+  }
+
+  /**
+   * @see #setProperty(String, Object)
+   */
+  void removePropertyChangeListener(@NotNull String name, @NotNull PropertyChangeListener listener) {
+    myPropertyChangeHelper.removePropertyChangeListener(name, listener);
   }
 
   @Nullable
-  synchronized JSQueryPool getJSQueryPool() {
+  JSQueryPool getJSQueryPool() {
     return myJSQueryPool;
-  }
-
-  synchronized void notifyBrowserCreated(@NotNull JBCefBrowser browser) {
-    if (myJSQueryPool == null) {
-      myJSQueryPool = JSQueryPool.create(this);
-    }
   }
 
   int nextJSQueryIndex() {
@@ -147,7 +169,7 @@ public class JBCefClient implements JBCefDisposable {
 
     @Nullable
     static JSQueryPool create(@NotNull JBCefClient client) {
-      Object size = client.getProperty(JBCEFCLIENT_JSQUERY_POOL_SIZE_PROP);
+      Object size = client.getProperty(JS_QUERY_POOL_SIZE);
       int poolSize = size instanceof Integer ? (Integer)size : JS_QUERY_SLOT_POOL_DEF_SIZE;
       if (poolSize > 0) {
         poolSize = Math.min(poolSize, JS_QUERY_SLOT_POOL_MAX_SIZE);
@@ -266,6 +288,13 @@ public class JBCefClient implements JBCefDisposable {
         public boolean onConsoleMessage(CefBrowser browser, CefSettings.LogSeverity level, String message, String source, int line) {
           return myDisplayHandler.handleBoolean(browser, handler -> {
             return handler.onConsoleMessage(browser, level, message, source, line);
+          });
+        }
+
+        @Override
+        public boolean onCursorChange(CefBrowser browser, int cursorType) {
+          return myDisplayHandler.handleBoolean(browser, handler -> {
+            return handler.onCursorChange(browser, cursorType);
           });
         }
       });
@@ -509,6 +538,13 @@ public class JBCefClient implements JBCefDisposable {
         public boolean onBeforeBrowse(CefBrowser browser, CefFrame frame, CefRequest request, boolean user_gesture, boolean is_redirect) {
           return myRequestHandler.handleBoolean(browser, handler -> {
             return handler.onBeforeBrowse(browser, frame, request, user_gesture, is_redirect);
+          });
+        }
+
+        @Override
+        public boolean onOpenURLFromTab(CefBrowser browser, CefFrame frame, String target_url, boolean user_gesture) {
+          return myRequestHandler.handleBoolean(browser, handler -> {
+            return handler.onOpenURLFromTab(browser, frame, target_url, user_gesture);
           });
         }
 

@@ -40,6 +40,7 @@ import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.ArrayUtilRt;
+import com.intellij.util.concurrency.annotations.RequiresBackgroundThread;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.vcsUtil.VcsUtil;
 import one.util.streamex.StreamEx;
@@ -331,7 +332,7 @@ public abstract class HgUtil {
   }
 
   @NotNull
-  @CalledInBackground
+  @RequiresBackgroundThread
   public static Map<VirtualFile, Collection<FilePath>> groupFilePathsByHgRoots(@NotNull Project project,
                                                                                @NotNull Collection<? extends FilePath> files) {
     Map<VirtualFile, Collection<FilePath>> sorted = new HashMap<>();
@@ -444,6 +445,7 @@ public abstract class HgUtil {
     return result != null && result.getExitValue() == 0 ? result.getBytesOutput() : ArrayUtilRt.EMPTY_BYTE_ARRAY;
   }
 
+  @NlsSafe
   public static String removePasswordIfNeeded(@NotNull String path) {
     Matcher matcher = URL_WITH_PASSWORD.matcher(path);
     if (matcher.matches()) {
@@ -479,7 +481,6 @@ public abstract class HgUtil {
   }
 
   @Nullable
-  @CalledInAwt
   public static HgRepository getCurrentRepository(@NotNull Project project) {
     if (project.isDisposed()) return null;
     return DvcsUtil.guessRepositoryForFile(project, getRepositoryManager(project),

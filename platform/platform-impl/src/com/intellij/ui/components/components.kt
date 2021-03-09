@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 @file:Suppress("FunctionName")
 package com.intellij.ui.components
 
@@ -17,7 +17,6 @@ import com.intellij.openapi.util.NlsContexts.Label
 import com.intellij.openapi.vcs.changes.issueLinks.LinkMouseListenerBase
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.*
-import com.intellij.ui.components.labels.LinkLabel
 import com.intellij.util.FontUtil
 import com.intellij.util.SmartList
 import com.intellij.util.io.URLUtil
@@ -25,7 +24,6 @@ import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.SwingHelper
 import com.intellij.util.ui.SwingHelper.addHistoryOnExpansion
 import com.intellij.util.ui.UIUtil
-import org.jetbrains.annotations.Nls
 import java.awt.*
 import javax.swing.*
 import javax.swing.event.DocumentEvent
@@ -34,22 +32,26 @@ import javax.swing.text.BadLocationException
 import javax.swing.text.JTextComponent
 import javax.swing.text.Segment
 
-private val LINK_TEXT_ATTRIBUTES: SimpleTextAttributes
-  get() = SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, JBUI.CurrentTheme.Link.linkColor())
+fun Label(@Label text: String, style: UIUtil.ComponentStyle? = null, fontColor: UIUtil.FontColor? = null, bold: Boolean = false) =
+  Label(text, style, fontColor, bold, null)
 
-fun Label(@Label text: String, style: UIUtil.ComponentStyle? = null, fontColor: UIUtil.FontColor? = null, bold: Boolean = false): JLabel {
+fun Label(@Label text: String, style: UIUtil.ComponentStyle? = null, fontColor: UIUtil.FontColor? = null, bold: Boolean = false, font: Font? = null): JLabel {
   val finalText = BundleBase.replaceMnemonicAmpersand(text)
   val label: JLabel
   if (fontColor == null) {
     label = if (finalText.contains('\n')) MultiLineLabel(finalText) else JLabel(finalText)
-    style?.let { UIUtil.applyStyle(it, label) }
   }
   else {
-    label = JBLabel(finalText, style ?: UIUtil.ComponentStyle.REGULAR, fontColor)
+    label = JBLabel(finalText, UIUtil.ComponentStyle.REGULAR, fontColor)
   }
 
-  if (bold) {
-    label.font = label.font.deriveFont(Font.BOLD)
+  if (font != null) {
+    label.font = font
+  } else {
+    style?.let { UIUtil.applyStyle(it, label) }
+    if (bold) {
+      label.font = label.font.deriveFont(Font.BOLD)
+    }
   }
 
   // surrounded by space to avoid false match
@@ -60,7 +62,7 @@ fun Label(@Label text: String, style: UIUtil.ComponentStyle? = null, fontColor: 
 }
 
 fun Link(@Label text: String, style: UIUtil.ComponentStyle? = null, action: () -> Unit): JComponent {
-  val result = LinkLabel.create(text, action)
+  val result = ActionLink(text) { action() }
   style?.let { UIUtil.applyStyle(it, result) }
   return result
 }
@@ -81,7 +83,7 @@ fun noteComponent(@Label note: String, linkHandler: ((url: String) -> Unit)? = n
 
     val linkUrl = matcher.group(1)
     val tag = if (linkHandler == null) SimpleColoredComponent.BrowserLauncherTag(linkUrl) else Runnable { linkHandler(linkUrl) }
-    noteComponent.append(matcher.group(2), LINK_TEXT_ATTRIBUTES, tag)
+    noteComponent.append(matcher.group(2), SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES, tag)
     prev = matcher.end()
   }
   while (matcher.find())
@@ -157,7 +159,7 @@ fun dialog(@DialogTitle title: String,
            okActionEnabled: Boolean = true,
            project: Project? = null,
            parent: Component? = null,
-           errorText: String? = null,
+           @DialogMessage errorText: String? = null,
            modality: IdeModalityType = IdeModalityType.IDE,
            createActions: ((DialogManager) -> List<Action>)? = null,
            ok: (() -> List<ValidationInfo>?)? = null): DialogWrapper {
@@ -332,13 +334,10 @@ val JPasswordField.chars: CharSequence?
     if (doc.length == 0) {
       return ""
     }
-
-    val segment = Segment()
-    try {
-      doc.getText(0, doc.length, segment)
+    else try {
+      return Segment().also { doc.getText(0, doc.length, it) }
     }
     catch (e: BadLocationException) {
       return null
     }
-    return segment
   }

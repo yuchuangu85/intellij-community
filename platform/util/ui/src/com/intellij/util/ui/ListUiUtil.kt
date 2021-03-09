@@ -3,11 +3,13 @@ package com.intellij.util.ui
 
 import com.intellij.ui.JBColor
 import java.awt.Color
+import java.awt.event.*
 import javax.swing.JList
+import javax.swing.SwingUtilities
 
 object ListUiUtil {
   object WithTallRow {
-    private val selectionBackground: JBColor = JBColor(0xE9EEF5, 0x464A4D)
+    private val selectionBackground: JBColor = JBColor(0xEDF6FE, 0x464A4D)
     private val unfocusedSelectionBackground: JBColor = JBColor(0xF5F5F5, 0x464A4D)
     private val alternativeRowBackground: JBColor = JBColor(0xFFFFFF, 0x313335)
 
@@ -43,6 +45,33 @@ object ListUiUtil {
       else {
         JBColor.namedColor("Table.alternativeRowBackground", alternativeRowBackground)
       }
+    }
+  }
+
+  object Selection {
+    fun installSelectionOnFocus(list: JList<*>): FocusListener {
+      val listener: FocusListener = object : FocusAdapter() {
+        override fun focusGained(e: FocusEvent) {
+          if (list.isSelectionEmpty && list.model.size > 0) {
+            list.selectedIndex = 0
+          }
+        }
+      }
+      list.addFocusListener(listener)
+      return listener
+    }
+
+    fun installSelectionOnRightClick(list: JList<*>): MouseListener {
+      val listener: MouseListener = object : MouseAdapter() {
+        override fun mousePressed(e: MouseEvent) {
+          if (SwingUtilities.isRightMouseButton(e)) {
+            val row = list.locationToIndex(e.point)
+            if (row != -1) list.selectedIndex = row
+          }
+        }
+      }
+      list.addMouseListener(listener)
+      return listener
     }
   }
 }

@@ -40,19 +40,16 @@ import java.util.List;
 
 import static com.intellij.codeInsight.editorActions.JoinLinesHandlerDelegate.CANNOT_JOIN;
 
-public class JoinLinesHandler extends EditorActionHandler {
+public class JoinLinesHandler extends EditorActionHandler.ForEachCaret {
   private static final Logger LOG = Logger.getInstance(JoinLinesHandler.class);
   private final EditorActionHandler myOriginalHandler;
 
   public JoinLinesHandler(EditorActionHandler originalHandler) {
-    super(true);
     myOriginalHandler = originalHandler;
   }
 
   @Override
-  public void doExecute(@NotNull final Editor editor, @Nullable Caret caret, final DataContext dataContext) {
-    assert caret != null;
-
+  public void doExecute(@NotNull final Editor editor, @NotNull Caret caret, final DataContext dataContext) {
     if (editor.isViewer() || !EditorModificationUtil.requestWriting(editor)) return;
 
     if (!(editor.getDocument() instanceof DocumentEx)) {
@@ -233,7 +230,7 @@ public class JoinLinesHandler extends EditorActionHandler {
       return startLine - myLine;
     }
 
-    private void removeLineBreaks(int lineCount, List<RangeMarker> markers) {
+    private void removeLineBreaks(int lineCount, List<? super RangeMarker> markers) {
       for (int i = 0; i < lineCount; i++) {
         myIndicator.checkCanceled();
         myIndicator.setFraction(0.3 + 0.2 * i / lineCount);
@@ -262,7 +259,7 @@ public class JoinLinesHandler extends EditorActionHandler {
       myManager.commitDocument(myDoc);
     }
 
-    private List<RangeMarker> processNonRawJoiners(List<RangeMarker> markers) {
+    private List<RangeMarker> processNonRawJoiners(List<? extends RangeMarker> markers) {
       List<RangeMarker> unprocessed = new ArrayList<>();
       for (int i = 0; i < markers.size(); i++) {
         myIndicator.checkCanceled();
@@ -301,7 +298,7 @@ public class JoinLinesHandler extends EditorActionHandler {
       return false;
     }
 
-    private void adjustWhiteSpace(List<RangeMarker> markers) {
+    private void adjustWhiteSpace(List<? extends RangeMarker> markers) {
       int size = markers.size();
       if (size == 0) return;
       int[] spacesToAdd = getSpacesToAdd(markers);
@@ -325,7 +322,7 @@ public class JoinLinesHandler extends EditorActionHandler {
       myManager.commitDocument(myDoc);
     }
 
-    private int[] getSpacesToAdd(List<RangeMarker> markers) {
+    private int[] getSpacesToAdd(List<? extends RangeMarker> markers) {
       int size = markers.size();
       int[] spacesToAdd = new int[size];
       Arrays.fill(spacesToAdd, -1);

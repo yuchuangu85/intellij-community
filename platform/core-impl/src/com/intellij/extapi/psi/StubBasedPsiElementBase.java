@@ -73,7 +73,7 @@ public class StubBasedPsiElementBase<T extends StubElement> extends ASTDelegateP
   private volatile SubstrateRef mySubstrateRef;
   private final IElementType myElementType;
 
-  public StubBasedPsiElementBase(@NotNull T stub, @NotNull IStubElementType nodeType) {
+  public StubBasedPsiElementBase(@NotNull T stub, @NotNull IStubElementType<?,?> nodeType) {
     mySubstrateRef = new SubstrateRef.StubRef(stub);
     myElementType = nodeType;
   }
@@ -241,9 +241,8 @@ public class StubBasedPsiElementBase<T extends StubElement> extends ASTDelegateP
     catch (PsiInvalidElementAccessException e) {
       if (PsiInvalidElementAccessException.getInvalidationTrace(this) != null) {
         throw new PsiInvalidElementAccessException(this, e);
-      } else {
-        throw e;
       }
+      throw e;
     }
   }
 
@@ -303,14 +302,6 @@ public class StubBasedPsiElementBase<T extends StubElement> extends ASTDelegateP
       return stub.getParentStub().getPsi();
     }
 
-    return SharedImplUtil.getParent(getNode());
-  }
-
-  /**
-   * @deprecated use {@link #getParent()} instead
-   */
-  @Deprecated
-  protected final PsiElement getParentByTree() {
     return SharedImplUtil.getParent(getNode());
   }
 

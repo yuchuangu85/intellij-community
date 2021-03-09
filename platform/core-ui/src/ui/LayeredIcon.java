@@ -1,8 +1,10 @@
 // Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui;
 
+import com.intellij.icons.AllIcons;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.IconLoader;
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.ui.icons.CompositeIcon;
 import com.intellij.ui.icons.DarkIconProvider;
 import com.intellij.util.ArrayUtil;
@@ -22,7 +24,7 @@ import static com.intellij.ui.scale.ScaleType.OBJ_SCALE;
 import static com.intellij.ui.scale.ScaleType.USR_SCALE;
 
 public class LayeredIcon extends JBCachingScalableIcon<LayeredIcon> implements DarkIconProvider, CompositeIcon, IconWithToolTip {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ui.LayeredIcon");
+  private static final Logger LOG = Logger.getInstance(LayeredIcon.class);
   private final Icon[] myIcons;
   private Icon[] myScaledIcons;
   private final boolean[] myDisabledLayers;
@@ -34,6 +36,10 @@ public class LayeredIcon extends JBCachingScalableIcon<LayeredIcon> implements D
 
   private int myWidth;
   private int myHeight;
+
+  public static final Icon ADD_WITH_DROPDOWN = new LayeredIcon(AllIcons.General.Add, AllIcons.General.Dropdown);
+  public static final Icon EDIT_WITH_DROPDOWN = new LayeredIcon(AllIcons.Actions.Edit, AllIcons.General.Dropdown);
+  public static final Icon GEAR_WITH_DROPDOWN = new LayeredIcon(AllIcons.General.GearPlain, AllIcons.General.Dropdown);
 
   {
     getScaleContext().addUpdateListener(this::updateSize);
@@ -319,13 +325,13 @@ public class LayeredIcon extends JBCachingScalableIcon<LayeredIcon> implements D
   }
 
   @Nullable
-  static String combineIconTooltips(Icon[] icons) {
+  static @NlsContexts.Tooltip String combineIconTooltips(Icon[] icons) {
     // If a layered icon contains only a single non-null layer and other layers are null, its tooltip is not a composite one.
     Icon singleIcon = null;
     for (Icon icon : icons) {
       if (icon != null) {
         if (singleIcon != null) {
-          StringBuilder result = new StringBuilder();
+          @NlsContexts.Tooltip StringBuilder result = new StringBuilder();
           Set<String> seenTooltips = new HashSet<>();
           buildCompositeTooltip(icons, result, seenTooltips);
           return result.toString();
@@ -339,7 +345,7 @@ public class LayeredIcon extends JBCachingScalableIcon<LayeredIcon> implements D
     return null;
   }
 
-  private static void buildCompositeTooltip(Icon[] icons, StringBuilder result, Set<String> seenTooltips) {
+  private static void buildCompositeTooltip(Icon[] icons, StringBuilder result, Set<? super String> seenTooltips) {
     for (int i = 0; i < icons.length; i++) {
       // first layer is the actual object (noun), other layers are modifiers (adjectives), so put first object in last position
       Icon icon = i == icons.length - 1 ? icons[0] : icons[i + 1];

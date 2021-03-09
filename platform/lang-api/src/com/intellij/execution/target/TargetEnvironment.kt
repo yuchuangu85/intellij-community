@@ -49,7 +49,7 @@ abstract class TargetEnvironment(
     var volumeData: TargetEnvironmentType.TargetSpecificVolumeData? = null  // excluded from equals / hashcode
   }
 
-  data class DownloadRoot(
+  data class DownloadRoot @JvmOverloads constructor(
     /**
      * A certain path on the local machine or null for creating a temporary directory.
      * The temporary directory should be deleted with [shutdown].
@@ -57,7 +57,13 @@ abstract class TargetEnvironment(
     val localRootPath: Path?,
 
     /** TODO Should [Temprorary] paths with the same hint point on the same directory for uploads and downloads? */
-    val targetRootPath: TargetPath
+    val targetRootPath: TargetPath,
+
+    /**
+     * If not null, target should try to persist the contents of the folder between the sessions,
+     * and make it available for the next session requests with the same persistentId
+     */
+    val persistentId: String? = null
   )
 
   /** Target TCP port forwardings. */
@@ -84,11 +90,19 @@ abstract class TargetEnvironment(
     val targetRoot: String
 
     /**
-     * Upload `"$localRootPath/$relativePath"` to `"$targetRoot/$relativePath"`.
-     * Returns the resulting remote path (even if it's predictable, many tests rely on specific, usually relative paths).
+     * Returns the resulting remote path (even if it's predictable, many tests rely on specific, usually relative paths)
+     * of uploading `"$localRootPath/$relativePath"` to `"$targetRoot/$relativePath"`.
+     * Does not perform actual upload.
      */
     @Throws(IOException::class)
-    fun upload(relativePath: String, progressIndicator: ProgressIndicator): String
+    fun resolveTargetPath(relativePath: String): String
+
+    /**
+     * Upload `"$localRootPath/$relativePath"` to `"$targetRoot/$relativePath"`
+     */
+    @Throws(IOException::class)
+    fun upload(relativePath: String,
+               targetProgressIndicator: TargetEnvironmentAwareRunProfileState.TargetProgressIndicator)
   }
 
   interface DownloadableVolume {  // TODO Would it be better if there is no inheritance from the upload Volume?
@@ -128,5 +142,4 @@ abstract class TargetEnvironment(
 
   //FIXME: document
   abstract fun shutdown()
-
 }

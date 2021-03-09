@@ -11,7 +11,6 @@ import com.intellij.openapi.roots.libraries.LibraryTable;
 import com.intellij.openapi.roots.libraries.LibraryTablesRegistrar;
 import com.intellij.openapi.roots.ui.configuration.ModuleEditor;
 import com.intellij.openapi.roots.ui.configuration.ProjectStructureConfigurable;
-import com.intellij.openapi.roots.ui.configuration.libraries.LibraryEditingUtil;
 import com.intellij.openapi.roots.ui.configuration.libraryEditor.ExistingLibraryEditor;
 import com.intellij.openapi.roots.ui.configuration.projectRoot.BaseLibrariesConfigurable;
 import com.intellij.openapi.roots.ui.configuration.projectRoot.LibrariesModifiableModel;
@@ -19,11 +18,12 @@ import com.intellij.openapi.roots.ui.configuration.projectRoot.LibraryConfigurab
 import com.intellij.openapi.roots.ui.configuration.projectRoot.StructureConfigurableContext;
 import com.intellij.openapi.ui.NamedConfigurable;
 import com.intellij.openapi.util.ActionCallback;
+import com.intellij.openapi.util.NlsSafe;
 import com.intellij.openapi.util.text.HtmlBuilder;
 import com.intellij.openapi.util.text.HtmlChunk;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.ui.navigation.Place;
 import com.intellij.util.PathUtil;
-import com.intellij.xml.util.XmlStringUtil;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
@@ -63,7 +63,7 @@ public class LibraryProjectStructureElement extends ProjectStructureElement {
                                   @NotNull OrderRootType type, String rootName, final ProjectStructureProblemType problemType) {
     final List<String> invalidUrls = library.getInvalidRootUrls(type);
     if (!invalidUrls.isEmpty()) {
-      final String description = createInvalidRootsDescription(invalidUrls, rootName, library.getName());
+      final HtmlChunk description = createInvalidRootsDescription(invalidUrls, rootName, library.getName());
       final PlaceInProjectStructure place = createPlace();
       final String message = JavaUiBundle.message("project.roots.error.message.invalid.roots", rootName, invalidUrls.size());
       ProjectStructureProblemDescription.ProblemLevel level = library.getTable().getTableLevel().equals(LibraryTablesRegistrar.PROJECT_LEVEL)
@@ -75,7 +75,7 @@ public class LibraryProjectStructureElement extends ProjectStructureElement {
     }
   }
 
-  private static String createInvalidRootsDescription(List<String> invalidClasses, String rootName, String libraryName) {
+  private static HtmlChunk createInvalidRootsDescription(List<String> invalidClasses, String rootName, @NlsSafe String libraryName) {
     HtmlBuilder buffer = new HtmlBuilder();
     final String name = StringUtil.escapeXmlEntities(libraryName);
     final HtmlChunk.Element link = HtmlChunk.link("http://library/" + name, name);
@@ -90,13 +90,14 @@ public class LibraryProjectStructureElement extends ProjectStructureElement {
       buffer.br().nbsp(2);
       buffer.append(PathUtil.toPresentableUrl(url));
     }
-    return buffer.wrapWith("html").toString();
+    return buffer.toFragment();
   }
 
   @NotNull
   private PlaceInProjectStructure createPlace() {
     final Project project = myContext.getProject();
-    return new PlaceInProjectStructureBase(project, ProjectStructureConfigurable.getInstance(project).createProjectOrGlobalLibraryPlace(myLibrary), this);
+    Place place = myContext.getModulesConfigurator().getProjectStructureConfigurable().createProjectOrGlobalLibraryPlace(myLibrary);
+    return new PlaceInProjectStructureBase(project, place, this);
   }
 
   @Override
@@ -143,9 +144,9 @@ public class LibraryProjectStructureElement extends ProjectStructureElement {
     final String name = Objects.toString(myLibrary.getName());
     final String libraryName = HtmlChunk.link("http://library/" + name, name).toString();
 
-    @Nls final String result = JavaUiBundle.message("library.0.is.not.used", libraryName);
-    return new ProjectStructureProblemDescription(XmlStringUtil.wrapInHtml(result),
-                                                  null,
+    final String result = JavaUiBundle.message("library.0.is.not.used", libraryName);
+    return new ProjectStructureProblemDescription(result,
+                                                  HtmlChunk.empty(),
                                                   createPlace(),
                                                   ProjectStructureProblemType.unused("unused-library"),
                                                   ProjectStructureProblemDescription.ProblemLevel.PROJECT,
@@ -154,7 +155,7 @@ public class LibraryProjectStructureElement extends ProjectStructureElement {
   }
 
   @Override
-  public @Nls(capitalization = Nls.Capitalization.Sentence) String getPresentableName() {
+  public String getPresentableName() {
     return myLibrary.getName();
   }
 
@@ -189,7 +190,7 @@ public class LibraryProjectStructureElement extends ProjectStructureElement {
           libraryEditor.removeRoot(invalidRoot, myType);
         }
         myContext.getDaemonAnalyzer().queueUpdate(LibraryProjectStructureElement.this);
-        final ProjectStructureConfigurable structureConfigurable = ProjectStructureConfigurable.getInstance(myContext.getProject());
+        final ProjectStructureConfigurable structureConfigurable = myContext.getModulesConfigurator().getProjectStructureConfigurable();
         navigate().doWhenDone(() -> {
           final NamedConfigurable configurable = structureConfigurable.getConfigurableFor(myLibrary).getSelectedConfigurable();
           if (configurable instanceof LibraryConfigurable) {
@@ -207,7 +208,9 @@ public class LibraryProjectStructureElement extends ProjectStructureElement {
 
     @Override
     public void performFix() {
-      LibraryEditingUtil.showDialogAndAddLibraryToDependencies(myLibrary, myContext.getProject(), false);
+      ProjectStructureValidator.showDialogAndAddLibraryToDependencies(myLibrary,
+                                                                      myContext.getModulesConfigurator().getProjectStructureConfigurable(),
+                                                                      false);
     }
   }
 
@@ -218,7 +221,8 @@ public class LibraryProjectStructureElement extends ProjectStructureElement {
 
     @Override
     public void performFix() {
-      BaseLibrariesConfigurable.getInstance(myContext.getProject(), myLibrary.getTable().getTableLevel()).removeLibrary(LibraryProjectStructureElement.this);
+      BaseLibrariesConfigurable.getInstance(myContext.getModulesConfigurator().getProjectStructureConfigurable(),
+                                            myLibrary.getTable().getTableLevel()).removeLibrary(LibraryProjectStructureElement.this);
     }
   }
 
@@ -229,7 +233,8 @@ public class LibraryProjectStructureElement extends ProjectStructureElement {
 
     @Override
     public void performFix() {
-      BaseLibrariesConfigurable configurable = BaseLibrariesConfigurable.getInstance(myContext.getProject(), LibraryTablesRegistrar.PROJECT_LEVEL);
+      ProjectStructureConfigurable projectStructureConfigurable = myContext.getModulesConfigurator().getProjectStructureConfigurable();
+      BaseLibrariesConfigurable configurable = BaseLibrariesConfigurable.getInstance(projectStructureConfigurable, LibraryTablesRegistrar.PROJECT_LEVEL);
       Library[] libraries = configurable.getModelProvider().getModifiableModel().getLibraries();
       List<LibraryProjectStructureElement> toRemove = new ArrayList<>();
       for (Library library : libraries) {

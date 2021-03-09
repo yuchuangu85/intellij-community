@@ -88,7 +88,7 @@ public class ComponentWithBrowseButton<Comp extends JComponent> extends JPanel i
     }
     if (ScreenReader.isActive()) {
       myBrowseButton.setFocusable(true);
-      myBrowseButton.getAccessibleContext().setAccessibleName("Browse");
+      myBrowseButton.getAccessibleContext().setAccessibleName(UIBundle.message("component.with.browse.button.accessible.name"));
     }
     new LazyDisposable(this);
   }
@@ -292,6 +292,7 @@ public class ComponentWithBrowseButton<Comp extends JComponent> extends JPanel i
    * @deprecated use {@link #addActionListener(ActionListener)} instead
    */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
   public void addBrowseFolderListener(@Nullable Project project, final BrowseFolderActionListener<Comp> actionListener, boolean autoRemoveOnHide) {
     addActionListener(actionListener);
   }

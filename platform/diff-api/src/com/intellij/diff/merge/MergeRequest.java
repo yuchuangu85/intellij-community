@@ -19,7 +19,7 @@ import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.NlsContexts;
 import com.intellij.openapi.util.UserDataHolder;
 import com.intellij.openapi.util.UserDataHolderBase;
-import org.jetbrains.annotations.CalledInAwt;
+import com.intellij.util.concurrency.annotations.RequiresEdt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -38,7 +38,7 @@ public abstract class MergeRequest implements UserDataHolder {
    * <p>
    * MergeRequest should keep the initial state of its content and restore it on {@link MergeResult#CANCEL}
    */
-  @CalledInAwt
+  @RequiresEdt
   public abstract void applyResult(@NotNull MergeResult result);
 
   /**

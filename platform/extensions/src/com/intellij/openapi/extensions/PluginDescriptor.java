@@ -2,19 +2,13 @@
 package com.intellij.openapi.extensions;
 
 import com.intellij.openapi.util.NlsSafe;
-import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.Nls;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.*;
 
 import java.io.File;
 import java.nio.file.Path;
 import java.util.Date;
 
 public interface PluginDescriptor {
-  /**
-   * @return plugin id or null if the descriptor is the nested (optional dependency) descriptor
-   */
   PluginId getPluginId();
 
   ClassLoader getPluginClassLoader();
@@ -55,6 +49,7 @@ public interface PluginDescriptor {
    * @deprecated Do not use.
    */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
   default PluginId @NotNull [] getDependentPluginIds() {
     return PluginId.EMPTY_ARRAY;
   }
@@ -65,13 +60,18 @@ public interface PluginDescriptor {
   @Deprecated
   PluginId @NotNull [] getOptionalDependentPluginIds();
 
-  String getVendor();
+  @NlsSafe String getVendor();
 
-  String getVersion();
+  //TODO: remove default implementation in 2021.3
+  @NlsSafe default String getOrganization() {
+    return "";
+  }
 
-  String getResourceBundleBaseName();
+  @NlsSafe String getVersion();
 
-  String getCategory();
+  @Nullable String getResourceBundleBaseName();
+
+  @NlsSafe String getCategory();
 
   String getVendorEmail();
 
@@ -88,9 +88,9 @@ public interface PluginDescriptor {
     return null;
   }
 
-  String getSinceBuild();
+  @NlsSafe String getSinceBuild();
 
-  String getUntilBuild();
+  @NlsSafe String getUntilBuild();
 
   default boolean allowBundledUpdate() {
     return false;

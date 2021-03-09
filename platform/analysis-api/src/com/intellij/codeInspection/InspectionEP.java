@@ -98,6 +98,7 @@ public class InspectionEP extends LanguageExtensionPoint<InspectionProfileEntry>
    * If unspecified, will use {@link #bundle}, then plugin's {@code <resource-bundle>} as fallback.
    *
    * @see #groupKey
+   * @see #groupPathKey
    */
   @Attribute("groupBundle")
   public String groupBundle;
@@ -111,6 +112,11 @@ public class InspectionEP extends LanguageExtensionPoint<InspectionProfileEntry>
    * Comma-delimited list of parent group names (excluding {@code groupName}) used in UI (Settings|Editor|Inspections), e.g. {@code "Java,Java language level migration aids"}.
    */
   @Attribute("groupPath") public @Nls(capitalization = Nls.Capitalization.Sentence) String groupPath;
+
+  /**
+   * Message key for {@link #groupPath}.
+   * @see #groupBundle
+   */
   @Attribute("groupPathKey") public String groupPathKey;
 
   protected InspectionEP() {
@@ -182,7 +188,7 @@ public class InspectionEP extends LanguageExtensionPoint<InspectionProfileEntry>
   @Attribute("hasStaticDescription")
   public boolean hasStaticDescription;
 
-  private @Nullable String getLocalizedString(@Nullable String bundleName, String key) {
+  private @Nullable @Nls String getLocalizedString(@Nullable String bundleName, String key) {
     String baseName = bundleName != null ? bundleName :
                       bundle == null ? getPluginDescriptor().getResourceBundleBaseName() : bundle;
     if (baseName == null || key == null) {

@@ -13,12 +13,12 @@ import com.intellij.openapi.extensions.PluginDescriptor;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.DumbAwareAction;
-import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ModifiableRootModel;
 import com.intellij.openapi.roots.impl.libraries.LibraryTableImplUtil;
 import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.roots.libraries.LibraryTable;
 import com.intellij.openapi.roots.ui.configuration.ModuleEditor;
+import com.intellij.openapi.roots.ui.configuration.ProjectStructureConfigurable;
 import com.intellij.openapi.roots.ui.configuration.libraryEditor.LibraryEditorListener;
 import com.intellij.openapi.roots.ui.configuration.projectRoot.*;
 import com.intellij.openapi.roots.ui.configuration.projectRoot.daemon.ProjectStructureElement;
@@ -48,13 +48,13 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-public class ArtifactsStructureConfigurable extends BaseStructureConfigurable {
+public final class ArtifactsStructureConfigurable extends BaseStructureConfigurable {
   private ArtifactsStructureConfigurableContextImpl myPackagingEditorContext;
   private final ArtifactEditorSettings myDefaultSettings = new ArtifactEditorSettings();
 
-  public ArtifactsStructureConfigurable(@NotNull Project project) {
-    super(project, new ArtifactStructureConfigurableState());
-    PackagingElementType.EP_NAME.getPoint().addExtensionPointListener(new ExtensionPointListener<PackagingElementType>() {
+  public ArtifactsStructureConfigurable(@NotNull ProjectStructureConfigurable projectStructureConfigurable) {
+    super(projectStructureConfigurable, new ArtifactStructureConfigurableState());
+    PackagingElementType.EP_NAME.addExtensionPointListener(new ExtensionPointListener<>() {
       @Override
       public void extensionRemoved(@NotNull PackagingElementType extension, @NotNull PluginDescriptor pluginDescriptor) {
         if (extension instanceof ComplexPackagingElementType && myDefaultSettings.getTypesToShowContent().contains(extension)) {
@@ -63,7 +63,7 @@ public class ArtifactsStructureConfigurable extends BaseStructureConfigurable {
           myDefaultSettings.setTypesToShowContent(updated);
         }
       }
-    }, false, this);
+    }, this);
   }
 
   @Override
@@ -74,7 +74,7 @@ public class ArtifactsStructureConfigurable extends BaseStructureConfigurable {
   public void init(StructureConfigurableContext context, ModuleStructureConfigurable moduleStructureConfigurable,
                    ProjectLibrariesConfigurable projectLibrariesConfig, GlobalLibrariesConfigurable globalLibrariesConfig) {
     super.init(context);
-    myPackagingEditorContext = new ArtifactsStructureConfigurableContextImpl(myContext, myProject, myDefaultSettings, new ArtifactAdapter() {
+    myPackagingEditorContext = new ArtifactsStructureConfigurableContextImpl(myContext, myProject, myDefaultSettings, new ArtifactListener() {
       @Override
       public void artifactAdded(@NotNull Artifact artifact) {
         final MyNode node = addArtifactNode(artifact);
@@ -118,7 +118,7 @@ public class ArtifactsStructureConfigurable extends BaseStructureConfigurable {
 
   private void updateLibraryElements(final Artifact artifact, final Library library, final String oldName, final String newName) {
     if (ArtifactUtil.processPackagingElements(myPackagingEditorContext.getRootElement(artifact), LibraryElementType.LIBRARY_ELEMENT_TYPE,
-                                              new PackagingElementProcessor<LibraryPackagingElement>() {
+                                              new PackagingElementProcessor<>() {
                                                 @Override
                                                 public boolean process(@NotNull LibraryPackagingElement element,
                                                                        @NotNull PackagingElementPath path) {
@@ -129,7 +129,7 @@ public class ArtifactsStructureConfigurable extends BaseStructureConfigurable {
     }
     myPackagingEditorContext.editLayout(artifact, () -> {
       final ModifiableArtifact modifiableArtifact = myPackagingEditorContext.getOrCreateModifiableArtifactModel().getOrCreateModifiableArtifact(artifact);
-      ArtifactUtil.processPackagingElements(modifiableArtifact, LibraryElementType.LIBRARY_ELEMENT_TYPE, new PackagingElementProcessor<LibraryPackagingElement>() {
+      ArtifactUtil.processPackagingElements(modifiableArtifact, LibraryElementType.LIBRARY_ELEMENT_TYPE, new PackagingElementProcessor<>() {
         @Override
         public boolean process(@NotNull LibraryPackagingElement element, @NotNull PackagingElementPath path) {
           if (isResolvedToLibrary(element, library, oldName)) {
@@ -243,10 +243,10 @@ public class ArtifactsStructureConfigurable extends BaseStructureConfigurable {
     return new AbstractAddGroup(JavaUiBundle.message("add.new.header.text")) {
       @Override
       public AnAction @NotNull [] getChildren(@Nullable AnActionEvent e) {
-        final ArtifactType[] types = ArtifactType.getAllTypes();
-        final AnAction[] actions = new AnAction[types.length];
-        for (int i = 0; i < types.length; i++) {
-          actions[i] = createAddArtifactAction(types[i]);
+        List<ArtifactType> types = ArtifactType.getAllTypes();
+        final AnAction[] actions = new AnAction[types.size()];
+        for (int i = 0; i < types.size(); i++) {
+          actions[i] = createAddArtifactAction(types.get(i));
         }
         return actions;
       }
@@ -314,7 +314,7 @@ public class ArtifactsStructureConfigurable extends BaseStructureConfigurable {
   public void disposeUIResources() {
     myPackagingEditorContext.saveEditorSettings();
     super.disposeUIResources();
-    myPackagingEditorContext.disposeUIResources();
+    myPackagingEditorContext.resetModifiableModel();
   }
 
   @Override

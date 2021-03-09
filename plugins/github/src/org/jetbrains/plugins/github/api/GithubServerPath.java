@@ -1,7 +1,9 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.github.api;
 
+import com.intellij.openapi.util.NlsSafe;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.hosting.GitHostingUrlUtil;
 import com.intellij.util.io.URLUtil;
 import com.intellij.util.xmlb.annotations.Attribute;
 import com.intellij.util.xmlb.annotations.Tag;
@@ -9,10 +11,8 @@ import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.github.exceptions.GithubParseException;
-import org.jetbrains.plugins.github.util.GithubUrlUtil;
 
 import java.net.URI;
-import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -77,7 +77,7 @@ public class GithubServerPath {
   }
 
   public boolean matches(@NotNull String gitRemoteUrl) {
-    URI uri = GithubUrlUtil.getUriFromRemoteUrl(gitRemoteUrl);
+    URI uri = GitHostingUrlUtil.getUriFromRemoteUrl(gitRemoteUrl);
     if (uri == null) return false;
 
     String host = uri.getHost();
@@ -85,20 +85,14 @@ public class GithubServerPath {
 
     if (!myHost.equalsIgnoreCase(host)) return false;
 
-    String path = uri.getPath();
-    if (path == null) return false;
-
-    List<String> pathParts = StringUtil.split(path, "/", true, true);
-    if (pathParts.size() < 2) return false;
-
-    String suffix = pathParts.size() == 2 ? null : StringUtil.join(pathParts.subList(0, pathParts.size() - 2), "/");
-
     if (mySuffix != null) {
-      return suffix != null && mySuffix.equalsIgnoreCase("/" + suffix);
+      String path = uri.getPath();
+      if (path == null) return false;
+
+      return StringUtil.startsWithIgnoreCase(path, mySuffix);
     }
-    else {
-      return suffix == null;
-    }
+
+    return true;
   }
 
   // 1 - schema, 2 - host, 4 - port, 5 - path
@@ -140,6 +134,14 @@ public class GithubServerPath {
   }
 
   @NotNull
+  public String toUrl(boolean showSchema) {
+    StringBuilder builder = new StringBuilder();
+    if (showSchema) builder.append(getSchemaUrlPart());
+    builder.append(myHost).append(getPortUrlPart()).append(StringUtil.notNullize(mySuffix));
+    return builder.toString();
+  }
+
+  @NotNull
   public String toApiUrl() {
     StringBuilder builder = new StringBuilder(getSchemaUrlPart());
     if (isGithubDotCom()) {
@@ -168,7 +170,7 @@ public class GithubServerPath {
     return myHost.equalsIgnoreCase(DEFAULT_HOST);
   }
 
-  public String toString() {
+  public @NlsSafe String toString() {
     String schema = myUseHttp != null ? getSchemaUrlPart() : "";
     return schema + myHost + getPortUrlPart() + StringUtil.notNullize(mySuffix);
   }

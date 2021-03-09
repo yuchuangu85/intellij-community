@@ -26,6 +26,7 @@ import com.intellij.psi.PsiReference;
 import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.containers.ContainerUtil;
 import com.siyeh.InspectionGadgetsBundle;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -55,14 +56,6 @@ public final class HighlightUtils {
 
   /**
    * @deprecated Intention can be invoked on a non EDT thread with a mock editor, so usages highlighting in the selected editor is incorrect.
-   * Please use {@link #highlightElement(PsiElement, Editor)} instead.
-   */
-  public static void highlightElement(@NotNull PsiElement element, String statusBarText) {
-    highlightElements(Collections.singleton(element), statusBarText);
-  }
-
-  /**
-   * @deprecated Intention can be invoked on a non EDT thread with a mock editor, so usages highlighting in the selected editor is incorrect.
    * Please use {@link #highlightElements(Collection, Editor)} instead.
    */
   public static void highlightElements(@NotNull final Collection<? extends PsiElement> elementCollection) {
@@ -74,7 +67,8 @@ public final class HighlightUtils {
    * Please use {@link #highlightElements(Collection, String, Editor)} instead.
    */
   @Deprecated
-  public static void highlightElements(@NotNull final Collection<? extends PsiElement> elementCollection, String statusBarText) {
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.2")
+  public static void highlightElements(@NotNull final Collection<? extends PsiElement> elementCollection, @NlsContexts.StatusBarText String statusBarText) {
     if (elementCollection.isEmpty()) {
       return;
     }

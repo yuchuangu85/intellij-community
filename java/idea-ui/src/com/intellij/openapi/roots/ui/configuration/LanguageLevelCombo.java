@@ -30,7 +30,7 @@ public abstract class LanguageLevelCombo extends ComboBox<Object> {
       addItem(level);
     }
 
-    setRenderer(new ColoredListCellRenderer<Object>() {
+    setRenderer(new ColoredListCellRenderer<>() {
       @Override
       protected void customizeCellRenderer(@NotNull JList<?> list, Object value, int index, boolean selected, boolean hasFocus) {
         if (value instanceof LanguageLevel) {
@@ -50,6 +50,7 @@ public abstract class LanguageLevelCombo extends ComboBox<Object> {
   private void checkAcceptedLevel(LanguageLevel selectedLevel) {
     if (selectedLevel == null)
       return;
+    hidePopup();
     LanguageLevel level = AcceptedLanguageLevelsSettings.checkAccepted(this, selectedLevel);
     if (level == null) {
       setSelectedItem(AcceptedLanguageLevelsSettings.getHighestAcceptedLevel());

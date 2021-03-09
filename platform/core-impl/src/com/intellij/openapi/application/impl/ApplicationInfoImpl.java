@@ -11,7 +11,6 @@ import com.intellij.openapi.application.ex.ApplicationInfoEx;
 import com.intellij.openapi.application.ex.ProgressSlide;
 import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.util.BuildNumber;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.util.text.StringUtilRt;
 import com.intellij.serviceContainer.NonInjectable;
 import org.jdom.Element;
@@ -61,7 +60,7 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
   private String mySvgEapIconUrl;
   private String mySmallSvgIconUrl;
   private String mySmallSvgEapIconUrl;
-  private String myToolWindowIconUrl = "/toolwindows/toolWindowProject.png";
+  private String myToolWindowIconUrl = "/toolwindows/toolWindowProject.svg";
   private String myWelcomeScreenLogoUrl;
 
   private Calendar myBuildDate;
@@ -69,6 +68,7 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
   private String myPackageCode;
   private boolean myShowLicensee = true;
   private String myCustomizeIDEWizardStepsProvider;
+  private String myCustomizeIDEWizardDialog;
   private final UpdateUrls myUpdateUrls;
   private String myDocumentationUrl;
   private String mySupportUrl;
@@ -99,6 +99,9 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
   private boolean mySubscriptionTipsAvailable;
   private String mySubscriptionAdditionalFormData;
   private final List<ProgressSlide> myProgressSlides = new ArrayList<>();
+
+  private String myDefaultLightLaf;
+  private String myDefaultDarkLaf;
 
   private static final @NonNls String ELEMENT_VERSION = "version";
   private static final @NonNls String ATTRIBUTE_MAJOR = "major";
@@ -158,6 +161,7 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
   private static final @NonNls String ELEMENT_JB_TV = "jetbrains-tv";
   private static final @NonNls String CUSTOMIZE_IDE_WIZARD_STEPS = "customize-ide-wizard";
   private static final @NonNls String STEPS_PROVIDER = "provider";
+  private static final @NonNls String WIZARD_DIALOG = "dialog";
   private static final @NonNls String ELEMENT_EVALUATION = "evaluation";
   private static final @NonNls String ATTRIBUTE_EVAL_LICENSE_URL = "license-url";
   private static final @NonNls String ELEMENT_LICENSING = "licensing";
@@ -174,7 +178,11 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
   private static final @NonNls String PROGRESS_SLIDE = "progressSlide";
   private static final @NonNls String PROGRESS_PERCENT = "progressPercent";
 
-  static final String DEFAULT_PLUGINS_HOST = "https://plugins.jetbrains.com";
+  private static final @NonNls String ELEMENT_DEFAULT_LAF = "default-laf";
+  private static final @NonNls String ATTRIBUTE_LAF_LIGHT = "light";
+  private static final @NonNls String ATTRIBUTE_LAF_DARK = "dark";
+
+  public static final String DEFAULT_PLUGINS_HOST = "https://plugins.jetbrains.com";
   static final String IDEA_PLUGINS_HOST_PROPERTY = "idea.plugins.host";
 
   private static volatile ApplicationInfoImpl instance;
@@ -288,6 +296,8 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
     Element wizardSteps = getChild(element, CUSTOMIZE_IDE_WIZARD_STEPS);
     if (wizardSteps != null) {
       myCustomizeIDEWizardStepsProvider = wizardSteps.getAttributeValue(STEPS_PROVIDER);
+
+      myCustomizeIDEWizardDialog = getAttributeValue(wizardSteps, WIZARD_DIALOG);
     }
 
     Element helpElement = getChild(element, HELP_ELEMENT_NAME);
@@ -362,7 +372,7 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
       myEventLogSettingsUrl = statisticsElement.getAttributeValue(ATTRIBUTE_EVENT_LOG_STATISTICS_SETTINGS);
     }
     else {
-      myEventLogSettingsUrl = "https://resources.jetbrains.com/storage/fus/config/v3/%s/%s.json";
+      myEventLogSettingsUrl = "https://resources.jetbrains.com/storage/fus/config/v4/%s/%s.json";
     }
 
     Element tvElement = getChild(element, ELEMENT_JB_TV);
@@ -394,6 +404,19 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
       mySubscriptionTipsKey = subscriptionsElement.getAttributeValue(ATTRIBUTE_SUBSCRIPTIONS_TIPS_KEY);
       mySubscriptionTipsAvailable = Boolean.parseBoolean(subscriptionsElement.getAttributeValue(ATTRIBUTE_SUBSCRIPTIONS_TIPS_AVAILABLE));
       mySubscriptionAdditionalFormData = subscriptionsElement.getAttributeValue(ATTRIBUTE_SUBSCRIPTIONS_ADDITIONAL_FORM_DATA);
+    }
+
+    Element defaultLafElement = getChild(element, ELEMENT_DEFAULT_LAF);
+    if (defaultLafElement != null) {
+      String laf = getAttributeValue(defaultLafElement, ATTRIBUTE_LAF_LIGHT);
+      if (laf != null) {
+        myDefaultLightLaf = laf.trim();
+      }
+
+      laf = getAttributeValue(defaultLafElement, ATTRIBUTE_LAF_DARK);
+      if (laf != null) {
+        myDefaultDarkLaf = laf.trim();
+      }
     }
   }
 
@@ -609,7 +632,11 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
 
   @Override
   public @Nullable String getSmallApplicationSvgIconUrl() {
-    return isEAP() && mySmallSvgEapIconUrl != null ? mySmallSvgEapIconUrl : mySmallSvgIconUrl;
+    return getSmallApplicationSvgIconUrl(isEAP());
+  }
+
+  public @Nullable String getSmallApplicationSvgIconUrl(boolean isEap) {
+    return isEap && mySmallSvgEapIconUrl != null ? mySmallSvgEapIconUrl : mySmallSvgIconUrl;
   }
 
   @Override
@@ -621,6 +648,9 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
   public @Nullable String getWelcomeScreenLogoUrl() {
     return myWelcomeScreenLogoUrl;
   }
+
+  @Override
+  public @Nullable String getCustomizeIDEWizardDialog() { return myCustomizeIDEWizardDialog; }
 
   @Override
   public @Nullable String getCustomizeIDEWizardStepsProvider() {
@@ -807,7 +837,7 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
   }
 
   @Override
-  public List<ProgressSlide> getProgressSlides() {
+  public @NotNull List<ProgressSlide> getProgressSlides() {
     return myProgressSlides;
   }
 
@@ -867,7 +897,7 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
       }
 
       String builtinPluginsUrl = element.getAttributeValue(ATTRIBUTE_BUILTIN_URL);
-      if (StringUtil.isNotEmpty(builtinPluginsUrl)) {
+      if (builtinPluginsUrl != null && !builtinPluginsUrl.isEmpty()) {
         myBuiltinPluginsUrl = builtinPluginsUrl;
       }
     }
@@ -942,8 +972,19 @@ public final class ApplicationInfoImpl extends ApplicationInfoEx {
     return PluginManagerCore.CORE_ID == pluginId || Collections.binarySearch(myEssentialPluginsIds, pluginId) >= 0;
   }
 
+  @Override
   public @NotNull List<PluginId> getEssentialPluginsIds() {
     return myEssentialPluginsIds;
+  }
+
+  @Override
+  public @Nullable String getDefaultLightLaf() {
+    return myDefaultLightLaf;
+  }
+
+  @Override
+  public @Nullable String getDefaultDarkLaf() {
+    return myDefaultDarkLaf;
   }
 
   private static final class UpdateUrlsImpl implements UpdateUrls {

@@ -151,6 +151,7 @@ internal abstract class GitCommitEditingActionBase<T : GitCommitEditingActionBas
     actionPerformedAfterChecks(commitEditingRequirements)
   }
 
+  @Nls
   protected open fun checkCommitsEditingAvailability(commitEditingData: T): String? {
     val description = checkHeadLinearHistory(commitEditingData)
     if (description != null) {
@@ -174,6 +175,7 @@ internal abstract class GitCommitEditingActionBase<T : GitCommitEditingActionBas
   /**
    * Check that a path which contains selected commits and doesn't contain merge commits exists in HEAD
    */
+  @Nls
   private fun checkHeadLinearHistory(commitEditingData: MultipleCommitEditingData): String? {
     val project = commitEditingData.project
     val root = commitEditingData.repository.root
@@ -257,7 +259,7 @@ internal abstract class GitCommitEditingActionBase<T : GitCommitEditingActionBas
   protected open fun getProhibitedStateMessage(
     commitEditingData: T,
     @Nls operation: String
-  ): String? = when (commitEditingData.repository.state) {
+  ): @Nls String? = when (commitEditingData.repository.state) {
     Repository.State.NORMAL, Repository.State.DETACHED -> null
     Repository.State.REBASING -> GitBundle.message("rebase.log.commit.editing.action.prohibit.state.rebasing", operation)
     Repository.State.MERGING -> GitBundle.message("rebase.log.commit.editing.action.prohibit.state.merging", operation)

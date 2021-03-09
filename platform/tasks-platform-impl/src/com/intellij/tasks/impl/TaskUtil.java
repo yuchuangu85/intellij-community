@@ -15,10 +15,10 @@ import com.intellij.tasks.CommitPlaceholderProvider;
 import com.intellij.tasks.LocalTask;
 import com.intellij.tasks.Task;
 import com.intellij.tasks.TaskRepository;
-import com.intellij.util.NullableFunction;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.text.DateFormatUtil;
 import org.jdom.Element;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -85,7 +85,7 @@ public final class TaskUtil {
     return formatTask(task, repository.getCommitMessageFormat());
   }
 
-  public static String getTrimmedSummary(Task task) {
+  public static @Nls String getTrimmedSummary(Task task) {
     String text;
     if (task.isIssue()) {
       text = task.getPresentableId() + ": " + task.getSummary();
@@ -254,7 +254,7 @@ public final class TaskUtil {
   public static List<Task> filterTasks(final String pattern, final List<? extends Task> tasks) {
     final com.intellij.util.text.Matcher matcher = getMatcher(pattern);
     return ContainerUtil.mapNotNull(tasks,
-                                    (NullableFunction<Task, Task>)task -> matcher.matches(task.getPresentableId()) || matcher.matches(task.getSummary()) ? task : null);
+                                    task -> matcher.matches(task.getPresentableId()) || matcher.matches(task.getSummary()) ? task : null);
   }
 
   private static com.intellij.util.text.Matcher getMatcher(String pattern) {

@@ -44,13 +44,13 @@ import com.intellij.ui.treeStructure.treetable.ListTreeTableModelOnColumns
 import com.intellij.ui.treeStructure.treetable.TreeTable
 import com.intellij.ui.treeStructure.treetable.TreeTableModel
 import com.intellij.util.EditSourceOnDoubleClickHandler
+import com.intellij.util.concurrency.annotations.RequiresEdt
 import com.intellij.util.containers.Convertor
 import com.intellij.util.ui.ColumnInfo
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import com.intellij.util.ui.tree.TreeUtil
 import com.intellij.vcsUtil.VcsUtil
-import org.jetbrains.annotations.CalledInAwt
 import org.jetbrains.annotations.NonNls
 import java.awt.event.ActionEvent
 import java.awt.event.MouseEvent
@@ -83,7 +83,7 @@ open class MultipleFileMergeDialog(
   private lateinit var mergeButton: JButton
   private val tableModel = ListTreeTableModelOnColumns(DefaultMutableTreeNode(), createColumns())
 
-  private val descriptionLabel = Label("Loading merge details...")
+  private val descriptionLabel = Label(VcsBundle.message("merge.loading.merge.details"))
 
   private var groupByDirectory: Boolean = false
     get() = when {
@@ -318,7 +318,7 @@ open class MultipleFileMergeDialog(
     updateModelFromFiles()
   }
 
-  @CalledInAwt
+  @RequiresEdt
   private fun resolveFileViaContent(file: VirtualFile, resolution: MergeSession.Resolution, data: MergeData) {
     if (!DiffUtil.makeWritable(project, file)) {
       throw IOException(UIBundle.message("file.is.read.only.message.text", file.presentableUrl))

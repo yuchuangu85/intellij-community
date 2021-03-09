@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.tasks.generic;
 
+import com.intellij.openapi.util.NlsContexts;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.ContainerUtil;
 import org.apache.commons.httpclient.HttpMethod;
@@ -33,7 +20,7 @@ import java.util.regex.Pattern;
 /**
  * @author Mikhail Golubev
  */
-public class GenericRepositoryUtil {
+public final class GenericRepositoryUtil {
   private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\{(\\w[-\\w]*)\\}");
 
   public static HttpMethod getPostMethodFromURL(final String requestUrl) {
@@ -62,7 +49,7 @@ public class GenericRepositoryUtil {
     for (TemplateVariable v : variables) {
       lookup.put(v.getName(), v.getValue());
     }
-    StringBuffer sb = new StringBuffer();
+    StringBuilder sb = new StringBuilder();
     Matcher m = PLACEHOLDER_PATTERN.matcher(s);
     while (m.find()) {
       String name = m.group(1);
@@ -89,7 +76,7 @@ public class GenericRepositoryUtil {
     return ContainerUtil.map2List(variables, variable -> String.format("{%s}", variable.getName()));
   }
 
-  public static String prettifyVariableName(String variableName) {
+  public static @NlsContexts.Label String prettifyVariableName(@NlsContexts.Label String variableName) {
     String prettyName = variableName.replace('_', ' ');
     return StringUtil.capitalizeWords(prettyName, true);
   }

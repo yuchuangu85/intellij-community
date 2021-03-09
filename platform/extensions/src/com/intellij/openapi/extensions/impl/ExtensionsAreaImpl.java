@@ -95,22 +95,23 @@ public final class ExtensionsAreaImpl implements ExtensionsArea {
     registerExtension(getExtensionPoint(epName), pluginDescriptor, extensionElement);
   }
 
-  @Override
-  public void registerExtension(@NotNull ExtensionPoint<?> extensionPoint, @NotNull PluginDescriptor pluginDescriptor, @NotNull Element extensionElement) {
+  private void registerExtension(@NotNull ExtensionPoint<?> extensionPoint,
+                                 @NotNull PluginDescriptor pluginDescriptor,
+                                 @NotNull Element extensionElement) {
     ((ExtensionPointImpl<?>)extensionPoint).createAndRegisterAdapter(extensionElement, pluginDescriptor, componentManager);
   }
 
   public boolean unregisterExtensions(@NotNull String extensionPointName,
-                                      @NotNull PluginDescriptor loadedPluginDescriptor,
-                                      @NotNull List<? extends Element> elements,
-                                      @NotNull List<? super Runnable> priorityListenerCallbacks,
-                                      @NotNull List<? super Runnable> listenerCallbacks) {
+                                      @NotNull PluginDescriptor pluginDescriptor,
+                                      @NotNull List<Element> elements,
+                                      @NotNull List<Runnable> priorityListenerCallbacks,
+                                      @NotNull List<Runnable> listenerCallbacks) {
     ExtensionPointImpl<?> point = extensionPoints.get(extensionPointName);
     if (point == null) {
       return false;
     }
 
-    point.unregisterExtensions(componentManager, loadedPluginDescriptor, elements, priorityListenerCallbacks, listenerCallbacks);
+    point.unregisterExtensions(componentManager, pluginDescriptor, elements, priorityListenerCallbacks, listenerCallbacks);
     return true;
   }
 
@@ -259,8 +260,12 @@ public final class ExtensionsAreaImpl implements ExtensionsArea {
       ExtensionPointImpl<?> old = map.put(point.getName(), point);
       if (old != null) {
         map.put(point.getName(), old);
-        throw componentManager.createError("Duplicate registration for EP '" + point.getName() + "': first in " + old.getPluginDescriptor() +
-                                             ", second in " + point.getPluginDescriptor(), point.getPluginDescriptor().getPluginId());
+        PluginDescriptor oldPluginDescriptor = old.getPluginDescriptor();
+        PluginDescriptor pluginDescriptor = point.getPluginDescriptor();
+        throw componentManager.createError("Duplicate registration for EP '" + point.getName() + "': " +
+                                           "first in " + oldPluginDescriptor + " (" + oldPluginDescriptor.getPluginPath() + ")" +
+                                           ", second in " + pluginDescriptor+ " (" + pluginDescriptor.getPluginPath() + ")",
+                                           pluginDescriptor.getPluginId());
       }
     }
   }

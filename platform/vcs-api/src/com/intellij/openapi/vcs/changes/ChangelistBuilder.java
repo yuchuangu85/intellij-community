@@ -9,6 +9,7 @@ import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsKey;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.vcsUtil.VcsUtil;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
@@ -17,8 +18,8 @@ import javax.swing.*;
  * Builder for the changes list in the file system. The instances of
  * this class are used to collect changes that happened in the file system.
  *
- * @see ChangeProvider#getChanges(VcsDirtyScope, ChangelistBuilder,com.intellij.openapi.progress.ProgressIndicator, ChangeListManagerGate)
  * @author max
+ * @see ChangeProvider#getChanges(VcsDirtyScope, ChangelistBuilder, com.intellij.openapi.progress.ProgressIndicator, ChangeListManagerGate)
  */
 public interface ChangelistBuilder {
   /**
@@ -26,7 +27,7 @@ public interface ChangelistBuilder {
    * version control system knows about.
    *
    * @param change a change to process.
-   * @param vcsKey
+   * @param vcsKey VCS
    */
   void processChange(Change change, VcsKey vcsKey);
 
@@ -39,7 +40,7 @@ public interface ChangelistBuilder {
    *
    * @param change         Submitted change
    * @param changeListName A name for a change list.
-   * @param vcsKey
+   * @param vcsKey         VCS
    */
   void processChangeInList(Change change, @NlsSafe String changeListName, VcsKey vcsKey);
 
@@ -67,7 +68,7 @@ public interface ChangelistBuilder {
    * @param file a file to process
    */
   void processLocallyDeletedFile(FilePath file);
-  
+
   void processLocallyDeletedFile(final LocallyDeletedChange locallyDeletedChange);
 
   /**
@@ -85,6 +86,7 @@ public interface ChangelistBuilder {
    * @deprecated use {@link #processIgnoredFile(FilePath)} instead
    */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
   default void processIgnoredFile(VirtualFile file) {
     if (file != null) {
       processIgnoredFile(VcsUtil.getFilePath(file));

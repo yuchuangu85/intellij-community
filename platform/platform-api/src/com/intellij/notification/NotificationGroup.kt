@@ -8,13 +8,10 @@ import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.ui.MessageType
 import com.intellij.openapi.util.NlsContexts.*
 import com.intellij.util.containers.ContainerUtil
+import org.jetbrains.annotations.ApiStatus
 import org.jetbrains.annotations.NonNls
 import java.util.concurrent.ConcurrentHashMap
 import javax.swing.Icon
-
-private val LOG = logger<NotificationGroup>()
-private val registeredGroups: MutableMap<String, NotificationGroup> = ConcurrentHashMap()
-private val registeredTitles: MutableMap<String, String> = ConcurrentHashMap()
 
 /**
  * Groups notifications and allows controlling display options in Settings.
@@ -27,24 +24,28 @@ class NotificationGroup private constructor(@param:NonNls val displayId: String,
                                             @NotificationTitle var title: String? = null,
                                             pluginId: PluginId? = null,
                                             registerGroup: Boolean = false) {
-
   @Deprecated("Use com.intellij.notification.impl.NotificationGroupEP and com.intellij.notification.NotificationGroupManager")
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
   constructor(@NonNls displayId: String,
               displayType: NotificationDisplayType,
               isLogByDefault: Boolean = true,
               @NonNls toolWindowId: String? = null,
               icon: Icon? = null,
               @NotificationTitle title: String? = null,
-              pluginId: PluginId? = null) : this(displayId, displayType, isLogByDefault, toolWindowId, icon, title, pluginId, true)
+              pluginId: PluginId? = null) : this(displayId = displayId, displayType = displayType, isLogByDefault = isLogByDefault,
+                                                 toolWindowId = toolWindowId, icon = icon, title = title, pluginId = pluginId,
+                                                 registerGroup = true)
 
   // Don't use @JvmOverloads for primary constructor to maintain binary API compatibility with plugins written in Kotlin
   @JvmOverloads
   @Deprecated("Use com.intellij.notification.impl.NotificationGroupEP and com.intellij.notification.NotificationGroupManager")
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
   constructor(@NonNls displayId: String,
               displayType: NotificationDisplayType,
               isLogByDefault: Boolean = true,
               @NonNls toolWindowId: String? = null,
-              icon: Icon? = null) : this(displayId, displayType, isLogByDefault, toolWindowId, icon, null)
+              icon: Icon? = null) : this(displayId = displayId, displayType = displayType, isLogByDefault = isLogByDefault,
+                                         toolWindowId = toolWindowId, icon = icon, registerGroup = true)
 
   var parentId: String? = null
     private set
@@ -67,6 +68,11 @@ class NotificationGroup private constructor(@param:NonNls val displayId: String,
   }
 
   companion object {
+    private val LOG = logger<NotificationGroup>()
+
+    private val registeredGroups: MutableMap<String, NotificationGroup> = ConcurrentHashMap()
+    private val registeredTitles: MutableMap<@NonNls String, @NotificationTitle String> = ConcurrentHashMap()
+
     @JvmStatic
     fun create(@NonNls displayId: String,
                displayType: NotificationDisplayType,
@@ -90,6 +96,7 @@ class NotificationGroup private constructor(@param:NonNls val displayId: String,
 
     @JvmStatic
     @Deprecated("Use com.intellij.notification.impl.NotificationGroupEP and com.intellij.notification.NotificationGroupManager")
+    @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
     fun balloonGroup(@NonNls displayId: String, @NotificationTitle title: String?): NotificationGroup {
       val notificationGroup = findRegisteredNotificationGroup(displayId)
       if (notificationGroup != null) {
@@ -174,7 +181,7 @@ class NotificationGroup private constructor(@param:NonNls val displayId: String,
     }
 
     @JvmStatic
-    fun findRegisteredGroup(displayId: String): NotificationGroup? {
+    fun findRegisteredGroup(@NonNls displayId: String): NotificationGroup? {
       var notificationGroup = findRegisteredNotificationGroup(displayId)
       if (notificationGroup == null) {
         notificationGroup = registeredGroups.get(displayId)
@@ -199,7 +206,7 @@ class NotificationGroup private constructor(@param:NonNls val displayId: String,
     @JvmStatic
     fun createIdWithTitle(@NonNls displayId: String, @NotificationTitle title: String): String {
       val oldTitle = registeredTitles.put(displayId, title)
-      LOG.assertTrue(oldTitle == null || oldTitle == title, "New title \"$title\" for NotificationGroup($displayId,$oldTitle)")
+      LOG.assertTrue(oldTitle == null || oldTitle == title, "NotificationGroup('$displayId', '$oldTitle') tried to be re-created with different title '$title'")
       return displayId
     }
 
@@ -214,6 +221,10 @@ class NotificationGroup private constructor(@param:NonNls val displayId: String,
 
   fun createNotification(@NotificationContent content: String, type: NotificationType): Notification {
     return createNotification("", content, type)
+  }
+
+  fun createNotification(@NotificationContent content: String, type: NotificationType, displayId: String): Notification {
+    return createNotification("", content, type, null, displayId)
   }
 
   fun createNotification(

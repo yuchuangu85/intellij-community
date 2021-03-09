@@ -44,19 +44,16 @@ public class ComparatorCombinatorsInspection extends AbstractBaseJavaLocalInspec
         super.visitLambdaExpression(lambda);
         PsiType type = lambda.getFunctionalInterfaceType();
         PsiParameter[] parameters = lambda.getParameterList().getParameters();
-        if (parameters.length != 2 ||
-            !(type instanceof PsiClassType) ||
-            !((PsiClassType)type).rawType().equalsToText(CommonClassNames.JAVA_UTIL_COMPARATOR)) {
+        if (parameters.length != 2 || !PsiTypesUtil.classNameEquals(type, CommonClassNames.JAVA_UTIL_COMPARATOR)) {
           return;
         }
         String replacementText = generateSimpleCombinator(lambda, parameters[0], parameters[1]);
         if (replacementText != null) {
           if (!LambdaUtil.isSafeLambdaReplacement(lambda, replacementText)) return;
           String qualifiedName = Objects.requireNonNull(StringUtil.substringBefore(replacementText, "("));
-          String methodName = StringUtil.getShortName(qualifiedName);
+          @NonNls String methodName = "Comparator." + StringUtil.getShortName(qualifiedName);
           final String problemMessage = InspectionGadgetsBundle.message("inspection.comparator.combinators.description2", methodName);
-          final String fixMessage = InspectionGadgetsBundle.message("inspection.comparator.combinators.fix.normal", methodName);
-          holder.registerProblem(lambda, problemMessage, ProblemHighlightType.LIKE_UNUSED_SYMBOL, new ReplaceWithComparatorFix(fixMessage));
+          holder.registerProblem(lambda, problemMessage, ProblemHighlightType.LIKE_UNUSED_SYMBOL, new ReplaceWithComparatorFix(methodName));
           return;
         }
         if (lambda.getBody() instanceof PsiCodeBlock) {
@@ -340,7 +337,7 @@ public class ComparatorCombinatorsInspection extends AbstractBaseJavaLocalInspec
       return null;
     }
     if (methodName == null) return null;
-    String text;
+    @NonNls String text;
     if (!methodName.startsWith("comparing")) {
       text = "java.util.Comparator." + methodName + "()";
     }

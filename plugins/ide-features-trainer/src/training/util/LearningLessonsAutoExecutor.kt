@@ -6,7 +6,9 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.runBackgroundableTask
 import com.intellij.openapi.project.Project
+import com.intellij.util.TimeoutUtil
 import org.jetbrains.concurrency.AsyncPromise
+import org.jetbrains.io.json
 import training.dsl.TaskTestContext
 import training.learn.CourseManager
 import training.learn.course.KLesson
@@ -34,16 +36,21 @@ class LearningLessonsAutoExecutor(val project: Project, private val progress: Pr
     }
   }
 
-  private fun runAllLessons() {
+  private fun runAllLessons(): MutableMap<Lesson, Long> {
+    val durations = mutableMapOf<Lesson, Long>()
     TaskTestContext.inTestMode = true
     val lessons = CourseManager.instance.lessonsForModules
 
     for (lesson in lessons) {
       if (lesson !is KLesson || lesson.testScriptProperties.skipTesting) continue
       progress.checkCanceled()
-      runSingleLesson(lesson)
+      val duration = TimeoutUtil.measureExecutionTime<Throwable> {
+        runSingleLesson(lesson)
+      }
+      durations[lesson] = duration
     }
     TaskTestContext.inTestMode = false
+    return durations
   }
 
   private fun executeLesson(lesson: Lesson) {
@@ -68,7 +75,8 @@ class LearningLessonsAutoExecutor(val project: Project, private val progress: Pr
       runBackgroundableTask("Running All Lessons", project) {
         try {
           val learningLessonsAutoExecutor = LearningLessonsAutoExecutor(project, it)
-          learningLessonsAutoExecutor.runAllLessons()
+          val durations = learningLessonsAutoExecutor.runAllLessons()
+          System.setProperty("ift.gui.result", getJsonStatus(durations))
         }
         finally {
           TaskTestContext.inTestMode = false
@@ -87,6 +95,24 @@ class LearningLessonsAutoExecutor(val project: Project, private val progress: Pr
           TaskTestContext.inTestMode = false
         }
       }
+    }
+
+    private fun getJsonStatus(durations: MutableMap<Lesson, Long>): String {
+      val result = StringBuilder()
+
+      result.json {
+        array("lessons") {
+          for (lesson in CourseManager.instance.lessonsForModules) {
+            if (lesson !is KLesson || lesson.testScriptProperties.skipTesting) continue
+            result.json {
+              "id" to lesson.id
+              "passed" to lesson.passed
+              "duration" toRaw durations[lesson].toString()
+            }
+          }
+        }
+      }
+      return result.toString()
     }
   }
 }

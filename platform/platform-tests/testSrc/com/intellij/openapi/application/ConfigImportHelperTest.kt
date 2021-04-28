@@ -1,17 +1,16 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.application
 
 import com.intellij.diagnostic.VMOptions
 import com.intellij.ide.plugins.PluginBuilder
-import com.intellij.ide.plugins.marketplace.MarketplaceRequests
 import com.intellij.ide.startup.StartupActionScriptManager
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.components.stateStore
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.extensions.PluginId
-import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.util.BuildNumber
 import com.intellij.openapi.util.SystemInfo
+import com.intellij.openapi.util.ThrowableNotNullBiFunction
 import com.intellij.testFramework.PlatformTestUtil.useAppConfigDir
 import com.intellij.util.io.isDirectory
 import kotlinx.coroutines.runBlocking
@@ -19,7 +18,6 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Condition
 import org.junit.Assume.assumeTrue
 import org.junit.Test
-import java.io.File
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -159,14 +157,14 @@ class ConfigImportHelperTest : ConfigImportHelperBaseTest() {
     val options = ConfigImportHelper.ConfigImportOptions(LOG)
     options.headless = true
     options.compatibleBuildNumber = BuildNumber.fromString("201.1")
-    options.marketplaceRequests = object : MarketplaceRequests() {
-      override fun downloadPlugin(pluginUrl: String, indicator: ProgressIndicator): File {
-        val path = localTempDir.newDirectory("pluginTemp").toPath().resolve("my-plugin-new.jar")
-        PluginBuilder()
-          .id(oldBuilder.id)
-          .buildJar(path)
-        return path.toFile()
-      }
+    options.downloadFunction = ThrowableNotNullBiFunction { _, _ ->
+      val path = localTempDir.newDirectory("pluginTemp")
+        .toPath()
+        .resolve("my-plugin-new.jar")
+      PluginBuilder()
+        .id(oldBuilder.id)
+        .buildJar(path)
+      path.toFile()
     }
     ConfigImportHelper.doImport(oldConfigDir, newConfigDir, null, oldPluginsDir, newPluginsDir, options)
     assertThat(newPluginsDir).isDirectoryContaining { it.fileName.toString() == "my-plugin-new.jar" }
@@ -185,11 +183,7 @@ class ConfigImportHelperTest : ConfigImportHelperBaseTest() {
     val options = ConfigImportHelper.ConfigImportOptions(LOG)
     options.headless = true
     options.compatibleBuildNumber = BuildNumber.fromString("201.1")
-    options.marketplaceRequests = object : MarketplaceRequests() {
-      override fun downloadPlugin(pluginUrl: String, indicator: ProgressIndicator): File {
-        throw IOException("404")
-      }
-    }
+    options.downloadFunction = ThrowableNotNullBiFunction { _, _ -> throw IOException("404") }
     ConfigImportHelper.doImport(oldConfigDir, newConfigDir, null, oldPluginsDir, newPluginsDir, options)
     assertThat(newPluginsDir).isDirectoryContaining { it.fileName.toString() == "my-plugin.jar" }
   }
@@ -242,8 +236,7 @@ class ConfigImportHelperTest : ConfigImportHelperBaseTest() {
       .version("1.1")
       .buildJar(tempPath)
 
-    val commands = mutableListOf<StartupActionScriptManager.ActionCommand>()
-    commands.add(StartupActionScriptManager.CopyCommand(tempPath, oldPluginsDir.resolve("my-plugin-1.1.jar")))
+    val commands = listOf(StartupActionScriptManager.CopyCommand(tempPath, oldPluginsDir.resolve("my-plugin-1.1.jar")))
     StartupActionScriptManager.saveActionScript(commands, oldPluginsTempDir.resolve(StartupActionScriptManager.ACTION_SCRIPT_FILE))
 
     PluginBuilder()
@@ -272,8 +265,7 @@ class ConfigImportHelperTest : ConfigImportHelperBaseTest() {
       .version("1.1")
       .buildJar(tempPath)
 
-    val commands = mutableListOf<StartupActionScriptManager.ActionCommand>()
-    commands.add(StartupActionScriptManager.CopyCommand(tempPath, oldPluginsDir.resolve("my-plugin-1.1.jar")))
+    val commands = listOf(StartupActionScriptManager.CopyCommand(tempPath, oldPluginsDir.resolve("my-plugin-1.1.jar")))
     StartupActionScriptManager.saveActionScript(commands, oldPluginsTempDir.resolve(StartupActionScriptManager.ACTION_SCRIPT_FILE))
 
     PluginBuilder()
@@ -288,11 +280,7 @@ class ConfigImportHelperTest : ConfigImportHelperBaseTest() {
     val options = ConfigImportHelper.ConfigImportOptions(LOG)
     options.headless = true
     options.compatibleBuildNumber = BuildNumber.fromString("201.1")
-    options.marketplaceRequests = object : MarketplaceRequests() {
-      override fun downloadPlugin(pluginUrl: String, indicator: ProgressIndicator): File {
-        throw AssertionError("No file download should be requested")
-      }
-    }
+    options.downloadFunction = ThrowableNotNullBiFunction { _, _ -> throw AssertionError("No file download should be requested") }
     ConfigImportHelper.doImport(oldConfigDir, newConfigDir, null, oldPluginsDir, newPluginsDir, options)
     assertThat(newPluginsDir)
       .isDirectoryContaining { it.fileName.toString() == "my-plugin-1.1.jar" }
@@ -309,8 +297,7 @@ class ConfigImportHelperTest : ConfigImportHelperBaseTest() {
       .version("1.1")
       .buildZip(tempPath)
 
-    val commands = mutableListOf<StartupActionScriptManager.ActionCommand>()
-    commands.add(StartupActionScriptManager.UnzipCommand(tempPath, oldPluginsDir))
+    val commands = listOf(StartupActionScriptManager.UnzipCommand(tempPath, oldPluginsDir))
     StartupActionScriptManager.saveActionScript(commands, oldPluginsTempDir.resolve(StartupActionScriptManager.ACTION_SCRIPT_FILE))
 
     PluginBuilder()

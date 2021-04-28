@@ -70,8 +70,9 @@
 
     <!-- PyDocstring -->
     <languageInjector implementation="com.jetbrains.python.documentation.doctest.PyDocstringLanguageInjector"/>
-    <lang.parserDefinition language="PyDocstring" implementationClass="com.jetbrains.python.documentation.doctest.PyDocstringParserDefinition"/>
+    <lang.parserDefinition language="Doctest" implementationClass="com.jetbrains.python.documentation.doctest.PyDocstringParserDefinition"/>
     <highlightErrorFilter implementation="com.jetbrains.python.documentation.doctest.PyDocstringErrorFilter"/>
+    <lang.formatter language="Doctest" implementationClass="com.jetbrains.python.documentation.doctest.PyDocstringFormattingModelBuilder"/>
 
 
     <lang.parserDefinition language="PythonStub" implementationClass="com.jetbrains.python.pyi.PyiParserDefinition"/>
@@ -371,6 +372,10 @@
       <className>com.jetbrains.python.codeInsight.intentions.PyInvertIfConditionIntention</className>
       <category>Python</category>
     </intentionAction>
+    
+    <registryKey defaultValue="false"
+                 description="Enable pyi stubs distributed with numpy (see https://github.com/numpy/numpy/issues/18565)"
+                 key="enable.numpy.pyi.stubs"/>
   </extensions>
 
   <extensionPoints>
@@ -397,6 +402,9 @@
                     dynamic="true"/>
     <extensionPoint qualifiedName="Pythonid.importCandidateProvider"
                     interface="com.jetbrains.python.codeInsight.imports.PyImportCandidateProvider"
+                    dynamic="true"/>
+    <extensionPoint qualifiedName="Pythonid.pyiStubSuppressor"
+                    interface="com.jetbrains.python.pyi.PyiStubSuppressor"
                     dynamic="true"/>
   </extensionPoints>
 
@@ -452,6 +460,7 @@
     <pyClassMembersProvider implementation="com.jetbrains.numpy.codeInsight.NumpyClassMembersProvider"/>
     <pyModuleMembersProvider implementation="com.jetbrains.numpy.codeInsight.NumpyModuleMembersProvider"/>
     <resolveResultRater implementation="com.jetbrains.numpy.codeInsight.NumpyResolveRater"/>
+    <pyiStubSuppressor implementation="com.jetbrains.numpy.codeInsight.NumpyPyiStubsSuppressor"/>
 
     <!--stdlib-->
     <canonicalPathProvider implementation="com.jetbrains.python.codeInsight.stdlib.PyStdlibCanonicalPathProvider"/>

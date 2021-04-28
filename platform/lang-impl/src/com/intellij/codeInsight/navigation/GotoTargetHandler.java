@@ -35,7 +35,6 @@ import com.intellij.usages.UsageView;
 import com.intellij.util.Alarm;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.Consumer;
-import com.intellij.util.SlowOperations;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -140,10 +139,8 @@ public abstract class GotoTargetHandler implements CodeInsightActionHandler {
         if (value instanceof AdditionalAction) {
           return myActionElementRenderer.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
         }
-        PsiElementListCellRenderer renderer = getRenderer(value, gotoData);
-        return SlowOperations.allowSlowOperations(
-          () -> renderer.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
-        );
+        PsiElementListCellRenderer<?> renderer = getRenderer(value, gotoData);
+        return renderer.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
       }
     }).
       setItemsChosenCallback(selectedElements -> {

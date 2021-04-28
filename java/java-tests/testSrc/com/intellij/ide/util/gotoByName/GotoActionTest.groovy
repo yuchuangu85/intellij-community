@@ -94,7 +94,6 @@ class GotoActionTest extends LightJavaCodeInsightFixtureTestCase {
     assert actionMatches('invalidate caches', action) == MatchMode.NAME
     assert actionMatches('cache invalid', action) == MatchMode.NAME
     assert actionMatches('rebuild of all caches', action) == MatchMode.DESCRIPTION
-    assert actionMatches('restart', action) == (ApplicationManager.application.isRestartCapable() ? MatchMode.NAME : MatchMode.NONE)
     assert actionMatches('invcach', action) == MatchMode.NAME
   }
 
@@ -403,14 +402,16 @@ class GotoActionTest extends LightJavaCodeInsightFixtureTestCase {
 
   private def actionMatches(String pattern, AnAction action) {
     def matcher = GotoActionItemProvider.buildMatcher(pattern)
-    return new GotoActionModel(project, null, null).actionMatches(pattern, matcher, action)
+    def model = new GotoActionModel(project, null, null)
+    model.buildGroupMappings()
+    return model.actionMatches(pattern, matcher, action)
   }
 
   private MatchedValue matchedAction(String text, String pattern, MatchMode mode = MatchMode.NAME, boolean isAvailable = true) {
     return createMatchedAction(project, createAction(text), pattern, mode, isAvailable)
   }
 
-  public static MatchedValue createMatchedAction(Project project, AnAction action, String pattern, MatchMode mode = MatchMode.NAME, boolean isAvailable = true) {
+  static MatchedValue createMatchedAction(Project project, AnAction action, String pattern, MatchMode mode = MatchMode.NAME, boolean isAvailable = true) {
     def model = new GotoActionModel(project, null, null)
     def wrapper = new ActionWrapper(action, null, mode, model) {
       @Override

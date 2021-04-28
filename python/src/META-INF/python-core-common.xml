@@ -406,8 +406,11 @@
     <notificationGroup id="ConfiguredPythonInterpreter" displayType="BALLOON" isLogByDefault="true" bundle="messages.PyBundle" key="sdk.has.been.configured.notification.name"/>
 
     <toolWindow id="Python Packages" anchor="bottom"
+                icon="PythonIcons.Python.PythonPackages"
                 factoryClass="com.jetbrains.python.packaging.toolwindow.PyPackagesToolWindowFactory"/>
     <statistics.counterUsagesCollector implementationClass="com.jetbrains.python.sdk.add.PyAddNewEnvCollector"/>
+
+    <vcs.envCustomizer implementation="com.jetbrains.python.sdk.PyVirtualEnvVcsCustomizer"/>
   </extensions>
 
   <extensionPoints>
@@ -476,6 +479,9 @@
     <extensionPoint qualifiedName="com.jetbrains.python.console.executeCustomizer"
                     interface="com.jetbrains.python.console.PyExecuteConsoleCustomizer"
                     dynamic="true"/>
+    <extensionPoint qualifiedName="com.jetbrains.python.debugger.tableViewCustomizer"
+                    interface="com.jetbrains.python.debugger.pydev.tables.PyTableViewCustomizer"
+                    dynamic="true"/>
 
     <!-- Experimental sdk EP, avoid using it -->
     <extensionPoint qualifiedName="Pythonid.pySdkProvider"
@@ -512,7 +518,7 @@
     <documentationLinkProvider implementation="com.jetbrains.numpy.codeInsight.SciPyDocumentationLinkProvider"/>
 
     <!-- PyDocstring -->
-    <visitorFilter language="PyDocstring" implementationClass="com.jetbrains.python.documentation.PyDocstringVisitorFilter"/>
+    <visitorFilter language="Doctest" implementationClass="com.jetbrains.python.documentation.PyDocstringVisitorFilter"/>
 
     <!-- Console -->
     <visitorFilter language="Python" implementationClass="com.jetbrains.python.console.ConsoleVisitorFilter"/>
@@ -674,6 +680,10 @@
 
   <extensions defaultExtensionNs="com.jetbrains.python.console">
     <executeCustomizer implementation="com.jetbrains.python.console.PyExecuteConsoleCustomizerDefault"/>
+  </extensions>
+
+  <extensions defaultExtensionNs="com.jetbrains.python.debugger">
+    <tableViewCustomizer implementation="com.jetbrains.python.debugger.pydev.tables.PyTableViewCustomizerDefault"/>
   </extensions>
 
   <applicationListeners>

@@ -1,11 +1,14 @@
 // Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.workspaceModel.storage
 
+import com.intellij.workspaceModel.storage.impl.AbstractEntityStorage
 import com.intellij.workspaceModel.storage.impl.ConsistencyCheckingMode
 import com.intellij.workspaceModel.storage.impl.WorkspaceEntityStorageBuilderImpl
 import com.intellij.workspaceModel.storage.url.MutableVirtualFileUrlIndex
 import com.intellij.workspaceModel.storage.url.VirtualFileUrl
 import com.intellij.workspaceModel.storage.url.VirtualFileUrlIndex
+import org.jetbrains.annotations.ApiStatus
+import org.jetbrains.annotations.TestOnly
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 
@@ -135,6 +138,7 @@ interface WorkspaceEntityWithPersistentId : WorkspaceEntity {
  */
 interface WorkspaceEntityStorage {
   fun <E : WorkspaceEntity> entities(entityClass: Class<E>): Sequence<E>
+  fun <E : WorkspaceEntity> entitiesAmount(entityClass: Class<E>): Int
   fun <E : WorkspaceEntity, R : WorkspaceEntity> referrers(e: E, entityClass: KClass<R>, property: KProperty1<R, EntityReference<E>>): Sequence<R>
   fun <E : WorkspaceEntityWithPersistentId, R : WorkspaceEntity> referrers(id: PersistentEntityId<E>, entityClass: Class<R>): Sequence<R>
   fun <E : WorkspaceEntityWithPersistentId> resolve(id: PersistentEntityId<E>): E?
@@ -175,11 +179,16 @@ interface WorkspaceEntityStorageBuilder : WorkspaceEntityStorage, WorkspaceEntit
   fun toStorage(): WorkspaceEntityStorage
 
   companion object {
+    @TestOnly
     @JvmStatic
-    fun create(): WorkspaceEntityStorageBuilder = WorkspaceEntityStorageBuilderImpl.create(ConsistencyCheckingMode.default())
+    fun create(): WorkspaceEntityStorageBuilder = WorkspaceEntityStorageBuilderImpl.create(ConsistencyCheckingMode.default(true))
 
     @JvmStatic
-    fun from(storage: WorkspaceEntityStorage): WorkspaceEntityStorageBuilder = WorkspaceEntityStorageBuilderImpl.from(storage, ConsistencyCheckingMode.default())
+    @ApiStatus.Internal
+    fun create(consistencyCheckingMode: ConsistencyCheckingMode): WorkspaceEntityStorageBuilder = WorkspaceEntityStorageBuilderImpl.create(consistencyCheckingMode)
+
+    @JvmStatic
+    fun from(storage: WorkspaceEntityStorage): WorkspaceEntityStorageBuilder = WorkspaceEntityStorageBuilderImpl.from(storage, (storage as AbstractEntityStorage).consistencyCheckingMode)
   }
 }
 

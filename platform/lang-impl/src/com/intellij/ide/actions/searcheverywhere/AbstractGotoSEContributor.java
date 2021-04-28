@@ -3,7 +3,6 @@ package com.intellij.ide.actions.searcheverywhere;
 
 import com.intellij.codeInsight.navigation.NavigationUtil;
 import com.intellij.ide.DataManager;
-import com.intellij.ide.IdeBundle;
 import com.intellij.ide.actions.GotoActionBase;
 import com.intellij.ide.actions.QualifiedNameProviderUtil;
 import com.intellij.ide.actions.SearchEverywhereClassifier;
@@ -17,6 +16,7 @@ import com.intellij.ide.util.scopeChooser.ScopeChooserCombo;
 import com.intellij.ide.util.scopeChooser.ScopeDescriptor;
 import com.intellij.lang.LangBundle;
 import com.intellij.navigation.NavigationItem;
+import com.intellij.navigation.PsiElementNavigationItem;
 import com.intellij.openapi.MnemonicHelper;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.actionSystem.ex.ActionManagerEx;
@@ -55,6 +55,7 @@ import com.intellij.ui.components.JBList;
 import com.intellij.ui.popup.list.ListPopupImpl;
 import com.intellij.util.CommonProcessors;
 import com.intellij.util.Processor;
+import com.intellij.util.TimeoutUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.JBIterable;
 import com.intellij.util.indexing.FindSymbolParameters;
@@ -148,12 +149,6 @@ public abstract class AbstractGotoSEContributor implements WeightedSearchEverywh
       .add(CommonDataKeys.PSI_ELEMENT, context)
       .add(CommonDataKeys.PSI_FILE, file)
       .build();
-  }
-
-  @Nullable
-  @Override
-  public String getAdvertisement() {
-    return DumbService.isDumb(myProject) ? IdeBundle.message("dumb.mode.results.might.be.incomplete") : null;
   }
 
   @NotNull
@@ -425,6 +420,9 @@ public abstract class AbstractGotoSEContributor implements WeightedSearchEverywh
       if (element instanceof DataProvider) {
         return ((DataProvider)element).getData(dataId);
       }
+      if (element instanceof PsiElementNavigationItem) {
+        return ((PsiElementNavigationItem)element).getTargetElement();
+      }
     }
 
     if (SearchEverywhereDataKeys.ITEM_STRING_DESCRIPTION.is(dataId) && element instanceof PsiElement) {
@@ -546,7 +544,14 @@ public abstract class AbstractGotoSEContributor implements WeightedSearchEverywh
             ScopeChooserAction.this, inputEvent, ActionPlaces.TOOLBAR, dataContext);
           ActionManagerEx actionManager = ActionManagerEx.getInstanceEx();
           actionManager.fireBeforeActionPerformed(ScopeChooserAction.this, dataContext, event);
-          onProjectScopeToggled();
+          long startNanoTime = System.nanoTime();
+          try {
+            onProjectScopeToggled();
+          }
+          finally {
+            long durationMillis = TimeoutUtil.getDurationMillis(startNanoTime);
+            actionManager.fireFinallyActionPerformed(ScopeChooserAction.this, event.getDataContext(), event, durationMillis);
+          }
           actionManager.fireAfterActionPerformed(ScopeChooserAction.this, dataContext, event);
         }
       });

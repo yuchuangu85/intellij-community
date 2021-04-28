@@ -1,7 +1,8 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.workspaceModel.ide.impl
 
-import com.intellij.diagnostic.StartUpMeasurer
+import com.intellij.diagnostic.ActivityCategory
+import com.intellij.diagnostic.StartUpMeasurer.startActivity
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.debug
@@ -14,6 +15,7 @@ import com.intellij.workspaceModel.storage.*
 import com.intellij.workspaceModel.storage.bridgeEntities.FacetEntity
 import com.intellij.workspaceModel.storage.bridgeEntities.FacetId
 import com.intellij.workspaceModel.storage.bridgeEntities.ModuleId
+import com.intellij.workspaceModel.storage.impl.ConsistencyCheckingMode
 import com.intellij.workspaceModel.storage.impl.VersionedEntityStorageImpl
 import kotlin.system.measureTimeMillis
 
@@ -40,10 +42,11 @@ class WorkspaceModelImpl(private val project: Project) : WorkspaceModel, Disposa
     log.debug { "Loading workspace model" }
 
     val initialContent = WorkspaceModelInitialTestContent.pop()
+    val consistencyCheckingMode = ConsistencyCheckingMode.defaultIde()
     val projectEntities = when {
       initialContent != null -> initialContent
       cache != null -> {
-        val activity = StartUpMeasurer.startActivity("(wm) Loading cache")
+        val activity = startActivity("module cache loading", ActivityCategory.DEFAULT)
         val previousStorage: WorkspaceEntityStorage?
         val loadingCacheTime = measureTimeMillis {
           previousStorage = cache.loadCache()
@@ -54,11 +57,11 @@ class WorkspaceModelImpl(private val project: Project) : WorkspaceModel, Disposa
           printInfoAboutTracedEntity(previousStorage, "cache")
           previousStorage
         }
-        else WorkspaceEntityStorageBuilder.create()
+        else WorkspaceEntityStorageBuilder.create(consistencyCheckingMode)
         activity.end()
         storage
       }
-      else -> WorkspaceEntityStorageBuilder.create()
+      else -> WorkspaceEntityStorageBuilder.create(consistencyCheckingMode)
     }
 
     entityStorage = VersionedEntityStorageImpl((projectEntities as? WorkspaceEntityStorageBuilder)?.toStorage() ?: projectEntities)

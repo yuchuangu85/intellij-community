@@ -18,7 +18,7 @@ class ToolwindowLeftToolbar : ToolwindowToolbar() {
   private val topToolbar = object : ToolwindowActionToolbar(topPane) {
     override fun actionsUpdated(forced: Boolean, newVisibleActions: List<AnAction>) {
       super.actionsUpdated(forced, newVisibleActions)
-      moreButton.update()
+      if (forced || canUpdateActions(newVisibleActions)) moreButton.update()
     }
   }
   private val bottomToolbar = ToolwindowActionToolbar(bottomPane)
@@ -39,22 +39,27 @@ class ToolwindowLeftToolbar : ToolwindowToolbar() {
 
   override fun removeStripeButton(project: Project, toolWindow: ToolWindow, anchor: ToolWindowAnchor) {
     when (anchor) {
-      ToolWindowAnchor.LEFT ->
-        topPane.components.find { (it as SquareStripeButton).button.id == toolWindow.id }?.let { topPane.remove(it) }
-      ToolWindowAnchor.BOTTOM ->
-        bottomPane.components.find { (it as SquareStripeButton).button.id == toolWindow.id }?.let { bottomPane.remove(it) }
+      ToolWindowAnchor.LEFT -> remove(topPane, toolWindow)
+      ToolWindowAnchor.BOTTOM -> remove(bottomPane, toolWindow)
     }
   }
 
-  override fun addStripeButton(project: Project, anchor: ToolWindowAnchor, comparator: Comparator<ToolWindow>, toolWindow: ToolWindow) {
+  override fun addStripeButton(project: Project, anchor: ToolWindowAnchor, toolWindow: ToolWindow) {
     when (anchor) {
-      ToolWindowAnchor.LEFT -> rebuildStripe(project, topPane, toolWindow, comparator)
-      ToolWindowAnchor.BOTTOM -> rebuildStripe(project, bottomPane, toolWindow, comparator)
+      ToolWindowAnchor.LEFT -> rebuildStripe(project, topPane, toolWindow)
+      ToolWindowAnchor.BOTTOM -> rebuildStripe(project, bottomPane, toolWindow)
     }
+  }
+
+  override fun reset() {
+    topPane.removeAll()
+    topPane.revalidate()
+    bottomPane.removeAll()
+    bottomPane.revalidate()
   }
 
   override fun getButtonFor(toolWindowId: String): SquareStripeButton? {
-    topPane.components.filterIsInstance(SquareStripeButton::class.java).find {it.button.id === toolWindowId}?.let { return it }
-    return bottomPane.components.filterIsInstance(SquareStripeButton::class.java).find {it.button.id === toolWindowId}
+    topPane.components.filterIsInstance(SquareStripeButton::class.java).find {it.button.id == toolWindowId}?.let { return it }
+    return bottomPane.components.filterIsInstance(SquareStripeButton::class.java).find {it.button.id == toolWindowId}
   }
 }

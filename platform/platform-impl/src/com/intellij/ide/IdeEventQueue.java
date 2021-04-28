@@ -33,11 +33,11 @@ import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.openapi.wm.IdeFrame;
+import com.intellij.openapi.wm.WindowManager;
 import com.intellij.openapi.wm.ex.WindowManagerEx;
 import com.intellij.openapi.wm.impl.FocusManagerImpl;
 import com.intellij.openapi.wm.impl.ProjectFrameHelper;
 import com.intellij.ui.ComponentUtil;
-import com.intellij.ui.mac.touchbar.TouchBarsManager;
 import com.intellij.util.*;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.EDT;
@@ -82,8 +82,7 @@ public final class IdeEventQueue extends EventQueue {
   private static final Logger TYPEAHEAD_LOG = Logger.getInstance(IdeEventQueue.class.getName() + ".typeahead");
   private static final Logger FOCUS_AWARE_RUNNABLES_LOG = Logger.getInstance(IdeEventQueue.class.getName() + ".runnables");
   private static final boolean ourActionAwareTypeaheadEnabled = !SystemInfoRt.isMac && Boolean.getBoolean("action.aware.typeAhead");
-  private static final boolean ourTypeAheadSearchEverywhereEnabled =
-    SystemProperties.getBooleanProperty("action.aware.typeAhead.searchEverywhere", false);
+  private static final boolean ourTypeAheadSearchEverywhereEnabled = Boolean.getBoolean("action.aware.typeAhead.searchEverywhere");
   private static final boolean ourSkipMetaPressOnLinux = Boolean.getBoolean("keymap.skip.meta.press.on.linux");
   private static TransactionGuardImpl ourTransactionGuard;
   private static ProgressManager ourProgressManager;
@@ -118,7 +117,6 @@ public final class IdeEventQueue extends EventQueue {
   private AWTEvent myCurrentSequencedEvent;
   private volatile long myLastActiveTime = System.nanoTime();
   private long myLastEventTime = System.currentTimeMillis();
-  private WindowManagerEx myWindowManager;
   private final List<EventDispatcher> myDispatchers = ContainerUtil.createLockFreeCopyOnWriteList();
   private final List<EventDispatcher> myPostProcessors = ContainerUtil.createLockFreeCopyOnWriteList();
   private final Set<Runnable> myReady = new HashSet<>();
@@ -193,6 +191,7 @@ public final class IdeEventQueue extends EventQueue {
   }
 
   private IdeEventQueue() {
+    assert EventQueue.isDispatchThread() : Thread.currentThread();
     EventQueue systemEventQueue = Toolkit.getDefaultToolkit().getSystemEventQueue();
     assert !(systemEventQueue instanceof IdeEventQueue) : systemEventQueue;
     systemEventQueue.push(this);
@@ -274,10 +273,6 @@ public final class IdeEventQueue extends EventQueue {
     catch (Exception e) {
       throw new RuntimeException(e);
     }
-  }
-
-  public void setWindowManager(@NotNull WindowManagerEx windowManager) {
-    myWindowManager = windowManager;
   }
 
   public void addIdleListener(@NotNull final Runnable runnable, final int timeoutMillis) {
@@ -533,8 +528,6 @@ public final class IdeEventQueue extends EventQueue {
   }
 
   private void onFocusEvent(@NotNull AWTEvent event) {
-    TouchBarsManager.onFocusEvent(event);
-
     if (FOCUS_AWARE_RUNNABLES_LOG.isDebugEnabled()) {
       FOCUS_AWARE_RUNNABLES_LOG.debug("Focus event list (execute on focus event): " + runnablesWaitingForFocusChangeState());
     }
@@ -558,8 +551,8 @@ public final class IdeEventQueue extends EventQueue {
           try {
             r.run();
           }
-          catch (Exception e) {
-            LOG.error(e);
+          catch (Throwable e) {
+            processException(e);
           }
         }
       }
@@ -578,13 +571,12 @@ public final class IdeEventQueue extends EventQueue {
     return manager;
   }
 
-  @Nullable
-  private static PerformanceWatcher obtainPerformanceWatcher() {
+  private static @Nullable PerformanceWatcher obtainPerformanceWatcher() {
     PerformanceWatcher watcher = ourPerformanceWatcher;
     if (watcher == null && LoadingState.COMPONENTS_LOADED.isOccurred()) {
       Application app = ApplicationManager.getApplication();
       if (app != null && !app.isDisposed()) {
-        watcher = PerformanceWatcher.getInstance();
+        watcher = ApplicationManager.getApplication().getServiceIfCreated(PerformanceWatcher.class);
         ourPerformanceWatcher = watcher;
       }
     }
@@ -720,7 +712,7 @@ public final class IdeEventQueue extends EventQueue {
     myEventCount++;
 
     if (e instanceof WindowEvent) {
-      processAppActivationEvent((WindowEvent)e, myWindowManager);
+      processAppActivationEvent((WindowEvent)e);
     }
 
     myKeyboardBusy = e instanceof KeyEvent || myKeyboardEventsPosted.get() > myKeyboardEventsDispatched.get();
@@ -749,10 +741,6 @@ public final class IdeEventQueue extends EventQueue {
       return;
     }
 
-    if (e instanceof InputEvent && SystemInfoRt.isMac) {
-      TouchBarsManager.onInputEvent((InputEvent)e);
-    }
-
     if (dispatchByCustomDispatchers(e)) {
       return;
     }
@@ -761,8 +749,13 @@ public final class IdeEventQueue extends EventQueue {
       return;
     }
 
-    if (e instanceof ComponentEvent && myWindowManager != null && !ApplicationManager.getApplication().isHeadlessEnvironment()) {
-      myWindowManager.dispatchComponentEvent((ComponentEvent)e);
+    if (e instanceof ComponentEvent &&
+        LoadingState.COMPONENTS_LOADED.isOccurred() &&
+        !ApplicationManager.getApplication().isHeadlessEnvironment()) {
+      WindowManagerEx windowManager = (WindowManagerEx)ApplicationManager.getApplication().getServiceIfCreated(WindowManager.class);
+      if (windowManager != null) {
+        windowManager.dispatchComponentEvent((ComponentEvent)e);
+      }
     }
 
     if (e instanceof KeyEvent) {
@@ -862,7 +855,7 @@ public final class IdeEventQueue extends EventQueue {
     return false;
   }
 
-  private static void processAppActivationEvent(@NotNull WindowEvent event, @Nullable WindowManagerEx windowManager) {
+  private static void processAppActivationEvent(@NotNull WindowEvent event) {
     ApplicationActivationStateManager.updateState(event);
 
     if (event.getID() != WindowEvent.WINDOW_DEACTIVATED && event.getID() != WindowEvent.WINDOW_LOST_FOCUS) {
@@ -875,6 +868,11 @@ public final class IdeEventQueue extends EventQueue {
       return;
     }
 
+    if (!LoadingState.COMPONENTS_LOADED.isOccurred()) {
+      return;
+    }
+
+    WindowManagerEx windowManager = (WindowManagerEx)ApplicationManager.getApplication().getServiceIfCreated(WindowManager.class);
     if (windowManager == null) {
       return;
     }

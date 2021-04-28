@@ -2,10 +2,7 @@
 package com.intellij.openapi.updateSettings.impl.pluginsAdvertisement
 
 import com.intellij.ide.IdeBundle
-import com.intellij.ide.plugins.IdeaPluginDescriptor
-import com.intellij.ide.plugins.PluginFeatureService
-import com.intellij.ide.plugins.PluginManagerConfigurable
-import com.intellij.ide.plugins.PluginManagerCore
+import com.intellij.ide.plugins.*
 import com.intellij.ide.plugins.advertiser.PluginData
 import com.intellij.ide.plugins.marketplace.MarketplaceRequests
 import com.intellij.notification.NotificationAction
@@ -17,7 +14,6 @@ import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.updateSettings.impl.PluginDownloader
-import com.intellij.openapi.updateSettings.impl.UpdateChecker
 import com.intellij.openapi.util.NlsContexts.NotificationContent
 import com.intellij.util.containers.MultiMap
 
@@ -31,7 +27,7 @@ open class PluginAdvertiserService {
 
   fun run(
     project: Project,
-    customPlugins: List<IdeaPluginDescriptor>,
+    customPlugins: List<PluginNode>,
     unknownFeatures: Set<UnknownFeature>,
   ) {
     val features = MultiMap.createSet<PluginId, UnknownFeature>()
@@ -57,14 +53,8 @@ open class PluginAdvertiserService {
         putFeature(installedPluginData)
       }
       else {
-        val params = mapOf(
-          "featureType" to featureType,
-          "implementationName" to implementationName,
-          "build" to marketplaceRequests.getBuildForPluginRepositoryRequests(),
-        )
-
         marketplaceRequests
-          .getFeatures(params)
+          .getFeatures(featureType, implementationName)
           .mapNotNull { it.toPluginData() }
           .forEach { putFeature(it) }
       }
@@ -82,11 +72,11 @@ open class PluginAdvertiserService {
     }
 
     val bundledPlugin = getBundledPluginToInstall(ids.values)
-    val plugins = mutableSetOf<PluginDownloader>()
-
-    if (ids.isNotEmpty()) {
-      UpdateChecker.mergePluginsFromRepositories(
-        marketplaceRequests.loadLastCompatiblePluginDescriptors(ids.keys.map { it.idString }),
+    val plugins = if (ids.isEmpty())
+      emptyList()
+    else
+      RepositoryHelper.mergePluginsFromRepositories(
+        marketplaceRequests.loadLastCompatiblePluginDescriptors(ids.keys),
         customPlugins,
         true,
       ).filterNot { loadedPlugin ->
@@ -99,12 +89,7 @@ open class PluginAdvertiserService {
         || !ids.containsKey(pluginId)
         || PluginManagerCore.isDisabled(pluginId)
         || PluginManagerCore.isBrokenPlugin(loadedPlugin)
-      }.map {
-        PluginDownloader.createDownloader(it)
-      }.forEach {
-        plugins += it
-      }
-    }
+      }.map { PluginDownloader.createDownloader(it) }
 
     invokeLater(ModalityState.NON_MODAL) {
       if (project.isDisposed)
@@ -137,7 +122,7 @@ open class PluginAdvertiserService {
         else
           NotificationAction.createSimpleExpiring(IdeBundle.message("plugins.advertiser.action.configure.plugins")) {
             FUSEventSource.NOTIFICATION.logConfigurePlugins(project)
-            PluginsAdvertiserDialog(project, plugins.toTypedArray(), customPlugins).show()
+            PluginsAdvertiserDialog(project, plugins, customPlugins).show()
           }
 
         getAddressedMessagePresentation(
@@ -185,7 +170,7 @@ open class PluginAdvertiserService {
   }
 
   open fun getAddressedMessagePresentation(
-    plugins: Set<PluginDownloader>,
+    plugins: Collection<PluginDownloader>,
     disabledPlugins: Collection<IdeaPluginDescriptor>,
     features: MultiMap<PluginId, UnknownFeature>,
   ): @NotificationContent String {

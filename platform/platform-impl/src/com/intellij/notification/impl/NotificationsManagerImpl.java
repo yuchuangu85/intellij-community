@@ -50,6 +50,7 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import javax.accessibility.AccessibleContext;
 import javax.swing.*;
 import javax.swing.event.HyperlinkEvent;
 import javax.swing.event.HyperlinkListener;
@@ -69,10 +70,8 @@ import java.util.function.Function;
 
 public final class NotificationsManagerImpl extends NotificationsManager {
   public static final Color DEFAULT_TEXT_COLOR = new JBColor(Gray._0, Gray._191);
-  public static final Color FILL_COLOR =
-    JBColor.namedColor("Notification.background", new JBColor(Gray._242, new Color(78, 80, 82)));
-  public static final Color BORDER_COLOR =
-    JBColor.namedColor("Notification.borderColor", new JBColor(Gray._178.withAlpha(205), new Color(86, 90, 92, 205)));
+  public static final Color FILL_COLOR = JBColor.namedColor("Notification.background", new JBColor(Gray._242, new Color(0x4E5052)));
+  public static final Color BORDER_COLOR = JBColor.namedColor("Notification.borderColor", new JBColor(0xCDB2B2B2, 0xCD565A5C));
 
   private @Nullable List<Notification> myEarlyNotifications = new ArrayList<>();
 
@@ -432,6 +431,7 @@ public final class NotificationsManagerImpl extends NotificationsManager {
 
     String textContent = NotificationsUtil.buildHtml(notification, style, true, null, fontStyle);
     text.setText(textContent);
+    setTextAccessibleName(text, textContent);
     text.setEditable(false);
     text.setOpaque(false);
 
@@ -558,7 +558,9 @@ public final class NotificationsManagerImpl extends NotificationsManager {
     if (notification.hasTitle()) {
       String titleStyle = StringUtil.defaultIfEmpty(fontStyle, "") + "white-space:nowrap;";
       JLabel title = new JLabel();
-      title.setText(NotificationsUtil.buildHtml(notification, titleStyle, false, null, null));
+      String titleContent = NotificationsUtil.buildHtml(notification, titleStyle, false, null, null);
+      title.setText(titleContent);
+      setTextAccessibleName(title, titleContent);
       title.setOpaque(false);
       title.setForeground(layoutData.textColor);
       centerPanel.addTitle(title);
@@ -673,6 +675,11 @@ public final class NotificationsManagerImpl extends NotificationsManager {
 
     Disposer.register(parentDisposable, balloon);
     return balloon;
+  }
+
+  private static void setTextAccessibleName(@NotNull JComponent component, @NotNull String htmlContent) {
+    component.putClientProperty(AccessibleContext.ACCESSIBLE_NAME_PROPERTY,
+                                StringUtil.unescapeXmlEntities(StringUtil.stripHtml(htmlContent, " ")));
   }
 
   public static @NotNull JScrollPane createBalloonScrollPane(@NotNull Component content, boolean configure) {

@@ -41,6 +41,7 @@
     </action>
     <action id="TemplateProjectStructure" class="com.intellij.ide.actions.TemplateProjectStructureAction">
       <add-to-group group-id="FileSettingsGroup" anchor="last"/>
+      <override-text place="MainMenu"/>
     </action>
     <action id="ShowSiblings" class="com.intellij.codeInsight.hint.actions.ShowSiblingsAction">
       <add-to-group group-id="QuickActions" anchor="after" relative-to-action="QuickImplementations"/>
@@ -150,11 +151,6 @@
     <action internal="true" id="CollectFUStatisticsAction"
             class="com.intellij.internal.statistic.actions.CollectFUStatisticsAction">
       <add-to-group group-id="FeatureUsage.Internal" anchor="last"/>
-    </action>
-
-    <!-- Help -->
-    <action id="WhatsNewAction" class="com.intellij.ide.actions.WhatsNewAction">
-      <add-to-group group-id="HelpMenu" anchor="after" relative-to-action="ShowTips"/>
     </action>
 
     <!-- Toolbar -->

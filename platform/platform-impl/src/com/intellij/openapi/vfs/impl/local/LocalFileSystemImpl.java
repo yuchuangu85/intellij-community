@@ -1,6 +1,7 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vfs.impl.local;
 
+import com.intellij.diagnostic.PluginException;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.util.Disposer;
@@ -16,13 +17,14 @@ import com.intellij.openapi.vfs.newvfs.NewVirtualFile;
 import com.intellij.openapi.vfs.newvfs.RefreshQueue;
 import com.intellij.openapi.vfs.newvfs.VfsImplUtil;
 import com.intellij.openapi.vfs.newvfs.impl.VirtualFileSystemEntry;
-import com.intellij.util.ObjectUtils;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.*;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+
+import static java.util.Objects.requireNonNullElse;
 
 public class LocalFileSystemImpl extends LocalFileSystemBase implements Disposable, VirtualFilePointerCapableFileSystem {
   private static final int STATUS_UPDATE_PERIOD = 1000;
@@ -50,13 +52,23 @@ public class LocalFileSystemImpl extends LocalFileSystemBase implements Disposab
         },
         STATUS_UPDATE_PERIOD, STATUS_UPDATE_PERIOD, TimeUnit.MILLISECONDS);
     });
+
+    for (PluggableLocalFileSystemContentLoader contentLoader : PLUGGABLE_CONTENT_LOADER_EP_NAME.getExtensionList()) {
+      try {
+        contentLoader.initialize();
+        Disposer.register(this, contentLoader);
+      }
+      catch (Exception e) {
+        LOG.error(PluginException.createByClass(e, contentLoader.getClass()));
+      }
+    }
+
     myWatchRootsManager = new WatchRootsManager(myWatcher, this);
     Disposer.register(ApplicationManager.getApplication(), this);
     new SymbolicLinkRefresher(this);
   }
 
-  @NotNull
-  public FileWatcher getFileWatcher() {
+  public @NotNull FileWatcher getFileWatcher() {
     return myWatcher;
   }
 
@@ -149,17 +161,16 @@ public class LocalFileSystemImpl extends LocalFileSystemBase implements Disposab
     return aliases;
   }
 
-  @NotNull
   @Override
-  public Set<WatchRequest> replaceWatchedRoots(@NotNull Collection<WatchRequest> watchRequestsToRemove,
-                                               @Nullable Collection<String> recursiveRootsToAdd,
-                                               @Nullable Collection<String> flatRootsToAdd) {
+  public @NotNull Set<WatchRequest> replaceWatchedRoots(@NotNull Collection<WatchRequest> watchRequestsToRemove,
+                                                        @Nullable Collection<String> recursiveRootsToAdd,
+                                                        @Nullable Collection<String> flatRootsToAdd) {
     if (myDisposed) return Collections.emptySet();
     Collection<WatchRequest> nonNullWatchRequestsToRemove = ContainerUtil.skipNulls(watchRequestsToRemove);
     LOG.assertTrue(nonNullWatchRequestsToRemove.size() == watchRequestsToRemove.size(), "watch requests collection should not contain `null` elements");
     return myWatchRootsManager.replaceWatchedRoots(nonNullWatchRequestsToRemove,
-                                                   ObjectUtils.notNull(recursiveRootsToAdd, Collections.emptyList()),
-                                                   ObjectUtils.notNull(flatRootsToAdd, Collections.emptyList()));
+                                                   requireNonNullElse(recursiveRootsToAdd, Collections.emptyList()),
+                                                   requireNonNullElse(flatRootsToAdd, Collections.emptyList()));
   }
 
   @Override
@@ -196,7 +207,6 @@ public class LocalFileSystemImpl extends LocalFileSystemBase implements Disposab
   }
 
   @Override
-  @NonNls
   public String toString() {
     return "LocalFileSystem";
   }

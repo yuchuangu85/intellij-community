@@ -1,4 +1,4 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.indexing;
 
 import com.intellij.diagnostic.PerformanceWatcher;
@@ -15,7 +15,6 @@ import com.intellij.util.ExceptionUtil;
 import com.intellij.util.Processor;
 import com.intellij.util.indexing.contentQueue.IndexUpdateRunner;
 import com.intellij.util.indexing.diagnostic.IndexDiagnosticDumper;
-import com.intellij.util.indexing.diagnostic.IndexingJobStatistics;
 import com.intellij.util.indexing.diagnostic.ProjectIndexingHistory;
 import com.intellij.util.indexing.diagnostic.ScanningStatistics;
 import org.jetbrains.annotations.ApiStatus;
@@ -27,6 +26,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Collection;
+import java.util.Collections;
 
 public final class FileBasedIndexProjectHandler {
   private static final Logger LOG = Logger.getInstance(FileBasedIndexProjectHandler.class);
@@ -36,7 +36,7 @@ public final class FileBasedIndexProjectHandler {
   private static final int ourMinFilesSizeToStartDumbMode = Registry.intValue("ide.dumb.mode.minFilesSizeToStart", 1048576);
 
   /**
-   * @deprecated Use {@see scheduleReindexingInDumbMode()} instead.
+   * @deprecated Use {@link #scheduleReindexingInDumbMode(Project)} instead.
    */
   @SuppressWarnings("DeprecatedIsStillUsed")
   @Deprecated
@@ -122,16 +122,15 @@ public final class FileBasedIndexProjectHandler {
         IndexUpdateRunner indexUpdateRunner = new IndexUpdateRunner(
           index, UnindexedFilesUpdater.GLOBAL_INDEXING_EXECUTOR, numberOfIndexingThreads
         );
-        IndexingJobStatistics statistics;
         IndexUpdateRunner.IndexingInterruptedException interruptedException = null;
         Instant indexingStart = Instant.now();
         String fileSetName = "Refreshed files";
+        IndexUpdateRunner.FileSet fileSet = new IndexUpdateRunner.FileSet(project, fileSetName, files);
         try {
-          statistics = indexUpdateRunner.indexFiles(project, fileSetName, files, indicator);
+          indexUpdateRunner.indexFiles(project, Collections.singletonList(fileSet), indicator);
         }
         catch (IndexUpdateRunner.IndexingInterruptedException e) {
           projectIndexingHistory.getTimes().setWasInterrupted(true);
-          statistics = e.myStatistics;
           interruptedException = e;
         }
         finally {
@@ -144,7 +143,7 @@ public final class FileBasedIndexProjectHandler {
         scanningStatistics.setNumberOfScannedFiles(files.size());
         scanningStatistics.setNumberOfFilesForIndexing(files.size());
         projectIndexingHistory.addScanningStatistics(scanningStatistics);
-        projectIndexingHistory.addProviderStatistics(statistics);
+        projectIndexingHistory.addProviderStatistics(fileSet.statistics);
 
         if (interruptedException != null) {
           ExceptionUtil.rethrow(interruptedException.getCause());

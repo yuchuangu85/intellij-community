@@ -4,13 +4,9 @@ package com.intellij.codeInspection.dataFlow.types;
 import com.intellij.codeInspection.dataFlow.DfaNullability;
 import com.intellij.codeInspection.dataFlow.TypeConstraint;
 import com.intellij.codeInspection.dataFlow.TypeConstraints;
-import com.intellij.psi.PsiType;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Set;
-
-import static com.intellij.codeInspection.dataFlow.types.DfTypes.BOTTOM;
-import static com.intellij.codeInspection.dataFlow.types.DfTypes.TOP;
 
 public class DfNullConstantType extends DfConstantType<Object> implements DfReferenceType {
   DfNullConstantType() {
@@ -32,12 +28,6 @@ public class DfNullConstantType extends DfConstantType<Object> implements DfRefe
   @Override
   public DfType tryNegate() {
     return DfTypes.NOT_NULL_OBJECT;
-  }
-
-  @NotNull
-  @Override
-  public PsiType getPsiType() {
-    return PsiType.NULL;
   }
 
   @NotNull

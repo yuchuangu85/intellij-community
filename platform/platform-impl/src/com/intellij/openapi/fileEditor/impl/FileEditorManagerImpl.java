@@ -5,7 +5,7 @@ import com.intellij.ProjectTopics;
 import com.intellij.featureStatistics.fusCollectors.LifecycleUsageTriggerCollector;
 import com.intellij.ide.IdeBundle;
 import com.intellij.ide.IdeEventQueue;
-import com.intellij.ide.actions.HideAllToolWindowsAction;
+import com.intellij.ide.actions.MaximizeEditorInSplitAction;
 import com.intellij.ide.actions.SplitAction;
 import com.intellij.ide.ui.UISettings;
 import com.intellij.ide.ui.UISettingsListener;
@@ -229,7 +229,7 @@ public class FileEditorManagerImpl extends FileEditorManagerEx implements Persis
                     splitter.getProportion() == splitter.getMinimumProportion())) ||
                   (splitter.getProportion() == splitter.getMinProportion(false) ||
                    splitter.getProportion() == splitter.getMaximumProportion())) {
-                Set<kotlin.Pair<Splitter, Boolean>> pairs = HideAllToolWindowsAction.Companion.getSplittersToMaximize(project, editor1);
+                Set<kotlin.Pair<Splitter, Boolean>> pairs = MaximizeEditorInSplitAction.Companion.getSplittersToMaximize(project, editor1);
                 for (kotlin.Pair<Splitter, Boolean> pair : pairs) {
                   Splitter s = pair.getFirst();
                   s.setProportion(pair.getSecond() ? s.getMaximumProportion() : s.getMinimumProportion());
@@ -726,20 +726,25 @@ public class FileEditorManagerImpl extends FileEditorManagerEx implements Persis
     }
 
     EditorWindow wndToOpenIn = null;
-    if (searchForSplitter && UISettings.getInstance().getEditorTabPlacement() != UISettings.TABS_NONE) {
+    if (searchForSplitter) {
+      boolean selectionRequired = UISettings.getInstance().getEditorTabPlacement() == UISettings.TABS_NONE;
       Set<EditorsSplitters> all = getAllSplitters();
       EditorsSplitters active = getActiveSplittersSync();
-      if (active.getCurrentWindow() != null && active.getCurrentWindow().isFileOpen(file)) {
-        wndToOpenIn = active.getCurrentWindow();
+      EditorWindow activeCurrentWindow = active.getCurrentWindow();
+      if (activeCurrentWindow != null
+          && activeCurrentWindow.isFileOpen(file)
+          && (!selectionRequired || file.equals(activeCurrentWindow.getSelectedFile()))) {
+        wndToOpenIn = activeCurrentWindow;
       }
       else {
         for (EditorsSplitters splitters : all) {
-          EditorWindow window = splitters.getCurrentWindow();
-          if (window == null) continue;
-
-          if (window.isFileOpen(file)) {
-            wndToOpenIn = window;
-            break;
+          EditorWindow[] windows = splitters.getWindows();
+          for (EditorWindow window : windows) {
+            if (window.isFileOpen(file)
+                && (!selectionRequired || file.equals(window.getSelectedFile()))) {
+              wndToOpenIn = window;
+              break;
+            }
           }
         }
       }
@@ -1057,8 +1062,8 @@ public class FileEditorManagerImpl extends FileEditorManagerEx implements Persis
         if (component != null) {
           component.requestFocus();
         }
-        IdeFocusManager.getInstance(myProject).toFront(window.getOwner());
       }
+      IdeFocusManager.getInstance(myProject).toFront(window.getOwner());
     }
 
     if (newEditor) {
@@ -1784,7 +1789,7 @@ public class FileEditorManagerImpl extends FileEditorManagerEx implements Persis
    */
   private final class MyVirtualFileListener implements BulkFileListener {
     @Override
-    public void before(@NotNull List<? extends VFileEvent> events) {
+    public void before(@NotNull List<? extends @NotNull VFileEvent> events) {
       for (VFileEvent event : events) {
         if (event instanceof VFileDeleteEvent) {
           beforeFileDeletion((VFileDeleteEvent)event);
@@ -1793,7 +1798,7 @@ public class FileEditorManagerImpl extends FileEditorManagerEx implements Persis
     }
 
     @Override
-    public void after(@NotNull List<? extends VFileEvent> events) {
+    public void after(@NotNull List<? extends @NotNull VFileEvent> events) {
       for (VFileEvent event : events) {
         if (event instanceof VFilePropertyChangeEvent) {
           propertyChanged((VFilePropertyChangeEvent)event);
@@ -2049,11 +2054,12 @@ public class FileEditorManagerImpl extends FileEditorManagerEx implements Persis
 
   @Override
   public void closeAllFiles() {
-    runBulkTabChange(getSplitters(), splitters -> {
-      for (VirtualFile openFile : splitters.getOpenFileList()) {
-        closeFile(openFile);
-      }
-    });
+    assertDispatchThread();
+
+    CommandProcessor.getInstance().executeCommand(myProject, () -> {
+      ourOpenFilesSetModificationCount.incrementAndGet();
+      runBulkTabChange(getSplitters(), splitters -> splitters.closeAllFiles());
+    }, "", null);
   }
 
   @Override

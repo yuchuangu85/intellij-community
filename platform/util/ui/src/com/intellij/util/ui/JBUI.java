@@ -332,6 +332,26 @@ public class JBUI {
       return customLine(color, 1);
     }
 
+    public static @NotNull Border customLineTop(Color color) {
+      return customLine(color, 1, 0, 0, 0);
+    }
+
+    public static @NotNull Border customLineLeft(Color color) {
+      return customLine(color, 0, 1, 0, 0);
+    }
+
+    public static @NotNull Border customLineRight(Color color) {
+      return customLine(color, 0, 0, 0, 1);
+    }
+
+    public static @NotNull Border customLineBottom(Color color) {
+      return customLine(color, 0, 0, 1, 0);
+    }
+
+    public static @Nullable Border compound(@Nullable Border outside, @Nullable Border inside) {
+      return inside == null ? outside : outside == null ? inside : new CompoundBorder(outside, inside);
+    }
+
     @NotNull
     public static Border merge(@Nullable Border source, @NotNull Border extra, boolean extraIsOutside) {
       if (source == null) return extra;
@@ -414,7 +434,12 @@ public class JBUI {
 
       @NotNull
       public static int elementIconGap() {
-        return new JBValue.UIInteger("ActionsList.icon.gap", scale(8)).get();
+        return new JBValue.UIInteger("ActionsList.icon.gap", scale(6)).get();
+      }
+
+      @NotNull
+      public static int mnemonicIconGap() {
+        return new JBValue.UIInteger("ActionsList.mnemonic.icon.gap", scale(4)).get();
       }
 
       @NotNull
@@ -630,6 +655,17 @@ public class JBUI {
       @NotNull
       public static Color underlinedTabForeground() {
         return JBColor.namedColor("EditorTabs.underlinedTabForeground", DefaultTabs.underlinedTabForeground());
+      }
+    }
+
+    public interface Notification {
+      Color FOREGROUND = JBColor.namedColor("Notification.foreground", Label.foreground());
+      Color BACKGROUND = JBColor.namedColor("Notification.background", 0xFFF8D1, 0x1D3857);
+
+      interface Error {
+        Color FOREGROUND = JBColor.namedColor("Notification.errorForeground", Notification.FOREGROUND);
+        Color BACKGROUND = JBColor.namedColor("Notification.errorBackground", 0xF5E6E7, 0x593D41);
+        Color BORDER_COLOR = JBColor.namedColor("Notification.errorBorderColor", 0xE0A8A9, 0x73454B);
       }
     }
 
@@ -947,7 +983,7 @@ public class JBUI {
 
       @NotNull
       public static Border advertiserBorder()  {
-        return new JBEmptyBorder(insets("SearchEverywhere.Advertiser.foreground", insetsLeft(8)));
+        return new JBEmptyBorder(insets("SearchEverywhere.Advertiser.borderInsets", insets(5, 10, 5, 15)));
       }
 
       @NotNull

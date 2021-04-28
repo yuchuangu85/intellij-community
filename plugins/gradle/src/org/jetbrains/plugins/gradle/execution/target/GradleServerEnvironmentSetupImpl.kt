@@ -5,25 +5,24 @@ import com.intellij.execution.Platform
 import com.intellij.execution.configurations.SimpleJavaParameters
 import com.intellij.execution.target.*
 import com.intellij.execution.target.java.JavaLanguageRuntimeConfiguration
-import com.intellij.execution.target.local.LocalTargetEnvironmentFactory
 import com.intellij.execution.target.local.LocalTargetEnvironmentRequest
 import com.intellij.execution.target.value.DeferredTargetValue
 import com.intellij.execution.target.value.TargetValue
 import com.intellij.lang.LangBundle
-import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.externalSystem.model.project.ExternalSystemSourceType
 import com.intellij.openapi.externalSystem.service.execution.TargetEnvironmentConfigurationProvider
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.projectRoots.JdkUtil
 import com.intellij.openapi.projectRoots.ProjectJdkTable
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.util.io.FileUtil.*
+import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.util.PathMapper
 import com.intellij.util.PathMappingSettings
 import com.intellij.util.io.isDirectory
+import com.intellij.util.text.nullize
 import org.gradle.api.invocation.Gradle
 import org.gradle.tooling.internal.consumer.parameters.ConsumerOperationParameters
 import org.gradle.wrapper.WrapperExecutor
@@ -42,12 +41,12 @@ import org.jetbrains.plugins.gradle.util.GradleConstants.INIT_SCRIPT_CMD_OPTION
 import org.slf4j.LoggerFactory
 import org.slf4j.impl.Log4jLoggerFactory
 import java.io.File
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 
 internal class GradleServerEnvironmentSetupImpl(private val project: Project,
+                                                private val classpathInferer: GradleServerClasspathInferer,
                                                 private val environmentConfigurationProvider: TargetEnvironmentConfigurationProvider) : GradleServerEnvironmentSetup, UserDataHolderBase() {
   override val javaParameters = SimpleJavaParameters()
   override lateinit var environmentConfiguration: TargetEnvironmentConfiguration
@@ -56,31 +55,39 @@ internal class GradleServerEnvironmentSetupImpl(private val project: Project,
   lateinit var projectUploadRoot: TargetEnvironment.UploadRoot
 
   private val uploader = Uploader()
-  private val localPathsToMap = mutableListOf<String>()
+  private val localPathsToMap = LinkedHashSet<String>()
 
   fun prepareEnvironment(targetBuildParametersBuilder: TargetBuildParameters.Builder,
                          consumerOperationParameters: ConsumerOperationParameters,
-                         progressIndicator: TargetEnvironmentAwareRunProfileState.TargetProgressIndicator): TargetedCommandLine {
+                         progressIndicator: GradleServerRunner.GradleServerProgressIndicator): TargetedCommandLine {
+    progressIndicator.checkCanceled()
     initJavaParameters()
 
     this.environmentConfiguration = environmentConfigurationProvider.environmentConfiguration
     val targetPathMapper = environmentConfigurationProvider.pathMapper
 
-    val factory = if (environmentConfiguration.typeId == "local") LocalTargetEnvironmentFactory()
-    else environmentConfiguration.createEnvironmentFactory(project)
+    val request = if (environmentConfiguration.typeId == "local") LocalTargetEnvironmentRequest()
+    else environmentConfiguration.createEnvironmentRequest(project)
+    val uploadRequest = request.duplicate()
 
-    val (request, targetArguments) =
-      prepareTargetEnvironmentRequest(factory, consumerOperationParameters, targetPathMapper, environmentConfiguration, progressIndicator)
+    environmentConfiguration.runtimes.findByType(GradleRuntimeTargetConfiguration::class.java)?.homePath?.nullize(true)?.also {
+      targetBuildParametersBuilder.useInstallation(it)
+    }
 
-    val targetedCommandLineBuilder = javaParameters.toCommandLine(request, environmentConfiguration)
+    progressIndicator.checkCanceled()
+    val targetArguments =
+      prepareTargetEnvironmentRequest(request, consumerOperationParameters, targetPathMapper, environmentConfiguration, progressIndicator)
+
+    progressIndicator.checkCanceled()
+    val targetedCommandLineBuilder = javaParameters.toCommandLine(request)
     projectUploadRoot = setupTargetProjectDirectories(consumerOperationParameters, request, targetedCommandLineBuilder)
-    val remoteEnvironment = factory.prepareRemoteEnvironment(request, progressIndicator)
+    val remoteEnvironment = request.prepareEnvironment(progressIndicator)
     targetEnvironment = remoteEnvironment
-    JdkUtil.COMMAND_LINE_SETUP_KEY.get(targetedCommandLineBuilder).provideEnvironment(remoteEnvironment, progressIndicator)
     EP.forEachExtensionSafe {
       it.handleCreatedTargetEnvironment(remoteEnvironment, this, progressIndicator)
     }
 
+    progressIndicator.checkCanceled()
     uploader.upload(remoteEnvironment, progressIndicator)
     val pathMappingSettings = PathMappingSettings(uploader.pathMappingSettings.pathMappings)
     for ((uploadRoot, uploadableVolume) in targetEnvironment.uploadVolumes) {
@@ -88,7 +95,7 @@ internal class GradleServerEnvironmentSetupImpl(private val project: Project,
       val relativePath = if (localRootPath.isDirectory()) "." else localRootPath.fileName.toString()
       pathMappingSettings.addMapping(localRootPath.toString(), uploadableVolume.resolveTargetPath(relativePath))
     }
-    val initScriptTargetPath = uploadPathMapperInitScript(factory, pathMappingSettings, targetPathMapper, environmentConfiguration, progressIndicator)
+    val initScriptTargetPath = uploadPathMapperInitScript(uploadRequest, pathMappingSettings, targetPathMapper, environmentConfiguration, progressIndicator)
     targetBuildParametersBuilder.withArguments(INIT_SCRIPT_CMD_OPTION, initScriptTargetPath)
     targetBuildParameters = targetBuildParametersBuilder.build(consumerOperationParameters, targetArguments)
 
@@ -145,12 +152,11 @@ internal class GradleServerEnvironmentSetupImpl(private val project: Project,
     return commonRoot!!.path
   }
 
-  private fun uploadPathMapperInitScript(factory: TargetEnvironmentFactory,
+  private fun uploadPathMapperInitScript(request: TargetEnvironmentRequest,
                                          pathMappingSettings: PathMappingSettings,
                                          targetPathMapper: PathMapper?,
                                          environmentConfiguration: TargetEnvironmentConfiguration,
-                                         progressIndicator: TargetEnvironmentAwareRunProfileState.TargetProgressIndicator): String {
-    val request = factory.createRequest()
+                                         progressIndicator: GradleServerRunner.GradleServerProgressIndicator): String {
     val uploader = Uploader()
     val mapperInitScript = StringBuilder("ext.pathMapper = [:]\n")
     for (localPath in localPathsToMap) {
@@ -180,17 +186,16 @@ internal class GradleServerEnvironmentSetupImpl(private val project: Project,
 
     val initScript = GradleExecutionHelper.writeToFileGradleInitScript(mapperInitScript.toString(), "ijtgtmapper")
     val targetValue = uploader.requestUploadIntoTarget(initScript.path, request, environmentConfiguration)
-    val remoteEnvironment = factory.prepareRemoteEnvironment(request, progressIndicator)
+    val remoteEnvironment = request.prepareEnvironment(progressIndicator)
     uploader.upload(remoteEnvironment, progressIndicator)
     return targetValue.targetValue.blockingGet(0)!!
   }
 
-  private fun prepareTargetEnvironmentRequest(factory: TargetEnvironmentFactory,
+  private fun prepareTargetEnvironmentRequest(request: TargetEnvironmentRequest,
                                               consumerOperationParameters: ConsumerOperationParameters,
                                               targetPathMapper: PathMapper?,
                                               environmentConfiguration: TargetEnvironmentConfiguration,
-                                              progressIndicator: TargetEnvironmentAwareRunProfileState.TargetProgressIndicator): Pair<TargetEnvironmentRequest, List<Pair<String, TargetValue<String>?>>> {
-    val request = factory.createRequest()
+                                              progressIndicator: TargetProgressIndicator): List<Pair<String, TargetValue<String>?>> {
     if (request is LocalTargetEnvironmentRequest) {
       javaParameters.vmParametersList.addProperty(Main.LOCAL_BUILD_PROPERTY, "true")
       val javaHomePath = consumerOperationParameters.javaHome.path
@@ -199,13 +204,7 @@ internal class GradleServerEnvironmentSetupImpl(private val project: Project,
     else {
       if (environmentConfiguration.runtimes.findByType(JavaLanguageRuntimeConfiguration::class.java) == null) {
         val localJavaHomePath = consumerOperationParameters.javaHome.path
-        val targetJavaHomePath: String
-        if (targetPathMapper?.canReplaceLocal(localJavaHomePath) == true) {
-          targetJavaHomePath = targetPathMapper.convertToRemote(localJavaHomePath)
-        }
-        else {
-          targetJavaHomePath = localJavaHomePath
-        }
+        val targetJavaHomePath = targetPathMapper.maybeConvertToRemote(localJavaHomePath)
         val javaLanguageRuntimeConfiguration = JavaLanguageRuntimeConfiguration().apply { homePath = targetJavaHomePath }
         environmentConfiguration.addLanguageRuntime(javaLanguageRuntimeConfiguration)
       }
@@ -216,7 +215,7 @@ internal class GradleServerEnvironmentSetupImpl(private val project: Project,
     EP.forEachExtensionSafe {
       it.prepareTargetEnvironmentRequest(request, this, progressIndicator)
     }
-    return request to targetArguments
+    return targetArguments
   }
 
   private fun TargetEnvironmentRequest.requestFileArgumentsUpload(parameters: ConsumerOperationParameters,
@@ -234,24 +233,31 @@ internal class GradleServerEnvironmentSetupImpl(private val project: Project,
         targetBuildArguments.add(arg to uploader.requestUploadIntoTarget(path, this, environmentConfiguration))
         val file = File(path)
         if (file.extension != GradleConstants.EXTENSION) continue
-        val fileContent = loadFile(file, StandardCharsets.UTF_8)
         if (file.name.startsWith("ijinit")) {
+          val fileContent = loadFile(file, CharsetToolkit.UTF8, true)
           // based on the format of the `/org/jetbrains/plugins/gradle/tooling/internal/init/init.gradle` file
-          val toolingExtensionsPaths = fileContent.substringAfter("initscript {\n" +
-                                                                  "  dependencies {\n" +
-                                                                  "    classpath files(").substringBefore(")\n" +
-                                                                                                          "  }")
-            .drop(10).dropLast(3).split("\"),mapPath(\"")
-          for (toolingExtensionsPath in toolingExtensionsPaths) {
-            javaParameters.classPath.add(toolingExtensionsPath)
-            localPathsToMap += toolingExtensionsPath
+          val toolingExtensionsPaths = fileContent
+            .substringAfter(
+              "initscript {\n" +
+              "  dependencies {\n" +
+              "    classpath files(", "")
+            .substringBefore(
+              ")\n" +
+              "  }", "")
+            .nullize()
+            ?.drop(10)?.dropLast(3)?.split("\"),mapPath(\"")
+          if (toolingExtensionsPaths != null) {
+            for (toolingExtensionsPath in toolingExtensionsPaths) {
+              javaParameters.classPath.add(toolingExtensionsPath)
+              localPathsToMap += toolingExtensionsPath
+            }
           }
         }
         else if (!file.name.startsWith("ijmapper")) {
-          val regex = Regex("mapPath\\(['|\"](.{2,})['|\"][)]")
+          val fileContent = loadFile(file, CharsetToolkit.UTF8, true)
+          val regex = Regex("mapPath\\(['|\"](.{2,}?)['|\"][)]")
           val matches = regex.findAll(fileContent)
-          val elements = matches.map { it.groupValues[1] }
-          localPathsToMap.addAll(elements)
+          matches.mapTo(localPathsToMap) { it.groupValues[1] }
         }
       }
       else {
@@ -282,27 +288,27 @@ internal class GradleServerEnvironmentSetupImpl(private val project: Project,
   }
 
   private fun initJavaParameters() {
-    val classPath = javaParameters.classPath
     // kotlin-stdlib-jdk8
-    classPath.add(PathManager.getJarPathForClass(KotlinVersion::class.java))
+    classpathInferer.add(KotlinVersion::class.java)
     // gradle-api jar
-    classPath.add(PathManager.getJarPathForClass(Gradle::class.java))
+    classpathInferer.add(Gradle::class.java)
     // gradle-api-impldep jar
-    classPath.add(PathManager.getJarPathForClass(org.gradle.internal.impldep.com.google.common.base.Function::class.java))
+    classpathInferer.add(org.gradle.internal.impldep.com.google.common.base.Function::class.java)
     // gradle-wrapper jar
-    classPath.add(PathManager.getJarPathForClass(WrapperExecutor::class.java))
+    classpathInferer.add(WrapperExecutor::class.java)
     // logging jars
-    classPath.add(PathManager.getJarPathForClass(LoggerFactory::class.java))
-    classPath.add(PathManager.getJarPathForClass(Log4jLoggerFactory::class.java))
-    classPath.add(PathManager.getJarPathForClass(org.apache.log4j.Level::class.java))
+    classpathInferer.add(LoggerFactory::class.java)
+    classpathInferer.add(Log4jLoggerFactory::class.java)
+    classpathInferer.add(org.apache.log4j.Level::class.java)
     // gradle tooling proxy module
-    classPath.add(PathManager.getJarPathForClass(Main::class.java))
+    classpathInferer.add(Main::class.java)
     // intellij.gradle.toolingExtension - for use of model adapters classes
-    classPath.add(PathManager.getJarPathForClass(
-      org.jetbrains.plugins.gradle.tooling.serialization.internal.adapter.InternalBuildIdentifier::class.java))
+    classpathInferer.add(
+      org.jetbrains.plugins.gradle.tooling.serialization.internal.adapter.InternalBuildIdentifier::class.java)
     // intellij.platform.externalSystem.rt
-    classPath.add(PathManager.getJarPathForClass(ExternalSystemSourceType::class.java))
+    classpathInferer.add(ExternalSystemSourceType::class.java)
 
+    javaParameters.classPath.addAll(classpathInferer.getClasspath())
     javaParameters.mainClass = Main::class.java.name
     if (log.isDebugEnabled) {
       javaParameters.programParametersList.add("--debug")
@@ -310,18 +316,20 @@ internal class GradleServerEnvironmentSetupImpl(private val project: Project,
   }
 
   private class Uploader {
-    private val environmentPromise = AsyncPromise<Pair<TargetEnvironment, TargetEnvironmentAwareRunProfileState.TargetProgressIndicator>>()
+    private val environmentPromise = AsyncPromise<Pair<TargetEnvironment, TargetProgressIndicator>>()
     private val dependingOnEnvironmentPromise = mutableListOf<Promise<Unit>>()
     private val uploads = mutableListOf<Upload>()
     val pathMappingSettings = PathMappingSettings()
 
-    fun upload(targetEnvironment: TargetEnvironment, progressIndicator: TargetEnvironmentAwareRunProfileState.TargetProgressIndicator) {
+    fun upload(targetEnvironment: TargetEnvironment, progressIndicator: GradleServerRunner.GradleServerProgressIndicator) {
       environmentPromise.setResult(targetEnvironment to progressIndicator)
       for (upload in uploads) {
+        progressIndicator.checkCanceled()
         upload.volume.upload(upload.relativePath, progressIndicator)
       }
       uploads.clear()
       for (promise in dependingOnEnvironmentPromise) {
+        progressIndicator.checkCanceled()
         promise.blockingGet(0)  // Just rethrows errors.
       }
       dependingOnEnvironmentPromise.clear()

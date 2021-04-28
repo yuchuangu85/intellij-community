@@ -39,16 +39,6 @@ public final class ContainerUtil {
     return new HashMap<>();
   }
 
-  /**
-   * @deprecated Use {@link HashMap#HashMap(Map)}
-   */
-  @Contract(pure = true)
-  @ApiStatus.ScheduledForRemoval(inVersion = "2021.2")
-  @Deprecated
-  public static @NotNull <K, V> HashMap<K, V> newHashMap(@NotNull Map<? extends K, ? extends V> map) {
-    return new HashMap<>(map);
-  }
-
   @SafeVarargs
   @Contract(pure = true)
   public static @NotNull <K, V> Map<K, V> newHashMap(@NotNull Pair<? extends K, ? extends V> first, Pair<? extends K,? extends V> @NotNull ... entries) {
@@ -93,16 +83,6 @@ public final class ContainerUtil {
     return map;
   }
 
-  /**
-   * @deprecated Use {@link THashMap#THashMap(Map)}
-   */
-  @Deprecated
-  @ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
-  @Contract(pure = true)
-  public static @NotNull <K, V> THashMap<K, V> newTroveMap() {
-    return new THashMap<>();
-  }
-
   @Deprecated
   @ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
   public static @NotNull <T> TObjectHashingStrategy<T> canonicalStrategy() {
@@ -115,15 +95,6 @@ public final class ContainerUtil {
   public static @NotNull <T> TObjectHashingStrategy<T> identityStrategy() {
     //noinspection unchecked
     return TObjectHashingStrategy.IDENTITY;
-  }
-
-  /**
-   * @deprecated Use {@link IdentityHashMap#IdentityHashMap()}
-   */
-  @Deprecated
-  @ApiStatus.ScheduledForRemoval(inVersion = "2021.2")
-  public static @NotNull <K, V> IdentityHashMap<K, V> newIdentityHashMap() {
-    return new IdentityHashMap<>();
   }
 
   /**
@@ -294,7 +265,7 @@ public final class ContainerUtil {
   @Contract(pure = true)
   public static @NotNull <T> HashSet<T> newHashSet(@NotNull Iterable<? extends T> iterable) {
     Iterator<? extends T> iterator = iterable.iterator();
-    HashSet<T> set = new HashSet<T>();
+    HashSet<T> set = new HashSet<>();
     while (iterator.hasNext()) set.add(iterator.next());
     return set;
   }
@@ -654,6 +625,13 @@ public final class ContainerUtil {
     return res;
   }
 
+  /**
+   * Process both sorted lists in order defined by {@param comparator}, call {@param processor} for each element in merged list result.
+   * When equal elements occurred, then if {@param mergeEqualItems} then output only the elemen from the {@param list1} and ignore the second,
+   * else output them both in unspecified order.
+   * {@param processor} is invoked for each (output element, is the element from {@param list1}) pair.
+   * Both {@param list1} and {@param list2} must be sorted according to {@param comparator}
+   */
   public static <T> void processSortedListsInOrder(@NotNull List<? extends T> list1,
                                                    @NotNull List<? extends T> list2,
                                                    @NotNull Comparator<? super T> comparator,
@@ -1882,6 +1860,20 @@ public final class ContainerUtil {
   }
 
   /**
+   * @param iterator an input iterator to process
+   * @param mapping a side-effect free function which transforms iterable elements
+   * @return read-only list consisting of the elements from the iterator converted by mapping
+   */
+  @Contract(pure = true)
+  public static @NotNull <T, V> List<V> map(@NotNull Iterator<? extends T> iterator, @NotNull Function<? super T, ? extends V> mapping) {
+    List<V> result = new ArrayList<>();
+    while (iterator.hasNext()) {
+      result.add(mapping.fun(iterator.next()));
+    }
+    return result.isEmpty() ? emptyList() : result;
+  }
+
+  /**
    * @param collection an input collection to process
    * @param mapping a side-effect free function which transforms iterable elements
    * @return read-only list consisting of the elements from the input collection converted by mapping
@@ -2376,6 +2368,11 @@ public final class ContainerUtil {
       }
     }
     return true;
+  }
+
+  @Contract(pure = true)
+  public static <T> boolean isSameElements(@NotNull Collection<? extends T> list1, @NotNull Collection<? extends T> list2) {
+    return list1.size() == list2.size() && list1.containsAll(list2);
   }
 
   /**

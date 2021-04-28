@@ -5,14 +5,13 @@ import com.intellij.ide.IdeBundle;
 import com.intellij.ide.plugins.IdeaPluginDescriptor;
 import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.ide.plugins.PluginNode;
+import com.intellij.ide.plugins.RepositoryHelper;
 import com.intellij.ide.plugins.marketplace.MarketplaceRequests;
 import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.updateSettings.impl.PluginDownloader;
-import com.intellij.openapi.updateSettings.impl.UpdateChecker;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -27,7 +26,7 @@ final class InstallAndEnableTask extends Task.Modal {
   private final @NotNull Set<PluginId> myPluginIds;
   private final boolean myShowDialog;
   private @NotNull final Runnable myOnSuccess;
-  private List<? extends IdeaPluginDescriptor> myCustomPlugins;
+  private @Nullable List<PluginNode> myCustomPlugins;
 
   InstallAndEnableTask(@Nullable Project project,
                        @NotNull Set<PluginId> pluginIds,
@@ -42,16 +41,14 @@ final class InstallAndEnableTask extends Task.Modal {
   @Override
   public void run(@NotNull ProgressIndicator indicator) {
     try {
-      List<String> ids = ContainerUtil.map(myPluginIds, PluginId::getIdString);
-      List<PluginNode> marketplacePlugins = MarketplaceRequests.getInstance().loadLastCompatiblePluginDescriptors(ids);
+      List<PluginNode> marketplacePlugins = MarketplaceRequests.getInstance().loadLastCompatiblePluginDescriptors(myPluginIds);
       myCustomPlugins = PluginsAdvertiser.loadPluginsFromCustomRepositories(indicator);
 
-      List<IdeaPluginDescriptor> descriptors = new ArrayList<>(UpdateChecker.mergePluginsFromRepositories(marketplacePlugins,
-                                                                                                          myCustomPlugins,
-                                                                                                          true));
+      List<IdeaPluginDescriptor> descriptors =
+        new ArrayList<>(RepositoryHelper.mergePluginsFromRepositories(marketplacePlugins, myCustomPlugins, true));
+
       for (IdeaPluginDescriptor descriptor : PluginManagerCore.getPlugins()) {
-        if (!descriptor.isEnabled() &&
-            PluginManagerCore.isCompatible(descriptor)) {
+        if (!descriptor.isEnabled() && PluginManagerCore.isCompatible(descriptor)) {
           descriptors.add(descriptor);
         }
       }
@@ -73,20 +70,16 @@ final class InstallAndEnableTask extends Task.Modal {
       return;
     }
 
-    PluginsAdvertiserDialog advertiserDialog = new PluginsAdvertiserDialog(null,
-                                                                           myPlugins.toArray(PluginDownloader.EMPTY_ARRAY),
-                                                                           myCustomPlugins);
-    advertiserDialog.setFinishFunction(result -> {
-      if (result) {
-        myOnSuccess.run();
-      }
-      return null;
-    });
-    if (myShowDialog) {
-      advertiserDialog.showAndGet();
-    }
-    else {
-      advertiserDialog.doInstallPlugins();
+    new PluginsAdvertiserDialog(null,
+                                myPlugins,
+                                myCustomPlugins,
+                                this::runOnSuccess)
+      .doInstallPlugins(myShowDialog);
+  }
+
+  private void runOnSuccess(boolean onSuccess) {
+    if (onSuccess) {
+      myOnSuccess.run();
     }
   }
 }

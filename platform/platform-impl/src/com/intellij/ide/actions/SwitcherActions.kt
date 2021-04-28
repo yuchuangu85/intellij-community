@@ -9,10 +9,12 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CustomShortcutSet
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.DumbAwareToggleAction
+import com.intellij.util.BitUtil.isSet
 import java.awt.event.*
 import java.util.function.Consumer
 import javax.swing.AbstractAction
 import javax.swing.JList
+import javax.swing.KeyStroke
 
 private fun forward(event: AnActionEvent) = true != event.inputEvent?.isShiftDown
 
@@ -28,7 +30,7 @@ internal abstract class BaseSwitcherAction(val forward: Boolean?) : DumbAwareAct
   override fun actionPerformed(event: AnActionEvent) {
     val project = event.project ?: return
     val switcher = Switcher.SWITCHER_KEY.get(project)
-    if (switcher != null && (!switcher.pinned || forward != null)) {
+    if (switcher != null && (!switcher.recent || forward != null)) {
       switcher.go(forward ?: forward(event))
     }
     else {
@@ -82,6 +84,44 @@ internal class SwitcherToggleOnlyEditedFilesAction : DumbAwareToggleAction() {
 }
 
 
+internal class SwitcherNextProblemAction : SwitcherProblemAction(true)
+internal class SwitcherPreviousProblemAction : SwitcherProblemAction(false)
+internal abstract class SwitcherProblemAction(val forward: Boolean) : DumbAwareAction() {
+  private fun getFileList(event: AnActionEvent) =
+    Switcher.SWITCHER_KEY.get(event.project)?.let { if (it.pinned) it.files else null }
+
+  private fun getErrorIndex(list: JList<SwitcherVirtualFile>): Int? {
+    val model = list.model ?: return null
+    val size = model.size
+    if (size <= 0) return null
+    val range = 0 until size
+    val start = when (forward) {
+      true -> list.leadSelectionIndex.let { if (range.first <= it && it < range.last) it + 1 else range.first }
+      else -> list.leadSelectionIndex.let { if (range.first < it && it <= range.last) it - 1 else range.last }
+    }
+    for (i in range) {
+      val index = when (forward) {
+        true -> (start + i).let { if (it > range.last) it - size else it }
+        else -> (start - i).let { if (it < range.first) it + size else it }
+      }
+      if (model.getElementAt(index)?.isProblemFile == true) return index
+    }
+    return null
+  }
+
+  override fun update(event: AnActionEvent) {
+    event.presentation.isEnabledAndVisible = getFileList(event) != null
+  }
+
+  override fun actionPerformed(event: AnActionEvent) {
+    val list = getFileList(event) ?: return
+    val index = getErrorIndex(list) ?: return
+    list.selectedIndex = index
+    list.ensureIndexIsVisible(index)
+  }
+}
+
+
 internal class SwitcherListFocusAction(val fromList: JList<*>, val toList: JList<*>, vararg listActionIds: String)
   : FocusListener, AbstractAction() {
 
@@ -112,6 +152,11 @@ internal class SwitcherListFocusAction(val fromList: JList<*>, val toList: JList
   init {
     listActionIds.forEach { fromList.actionMap.put(it, this) }
     toList.addFocusListener(this)
+    toList.addListSelectionListener {
+      if (!fromList.isSelectionEmpty && !toList.isSelectionEmpty) {
+        fromList.selectionModel.clearSelection()
+      }
+    }
   }
 }
 
@@ -131,12 +176,20 @@ internal class SwitcherKeyReleaseListener(event: InputEvent?, val consumer: Cons
     if (wasMetaDown) append("meta ")
   }.toString()
 
-  val forbiddenMnemonic = (event as? KeyEvent)?.keyCode?.let {
-    when (it) {
-      in KeyEvent.VK_0..KeyEvent.VK_9 -> it.toChar().toString()
-      in KeyEvent.VK_A..KeyEvent.VK_Z -> it.toChar().toString()
-      else -> null
-    }
+  val forbiddenMnemonic = (event as? KeyEvent)?.keyCode?.let { getMnemonic(it) }
+
+  fun getForbiddenMnemonic(keyStroke: KeyStroke) = when {
+    isSet(keyStroke.modifiers, InputEvent.ALT_DOWN_MASK) != wasAltDown -> null
+    isSet(keyStroke.modifiers, InputEvent.ALT_GRAPH_DOWN_MASK) != wasAltGraphDown -> null
+    isSet(keyStroke.modifiers, InputEvent.CTRL_DOWN_MASK) != wasControlDown -> null
+    isSet(keyStroke.modifiers, InputEvent.META_DOWN_MASK) != wasMetaDown -> null
+    else -> getMnemonic(keyStroke.keyCode)
+  }
+
+  private fun getMnemonic(keyCode: Int) = when (keyCode) {
+    in KeyEvent.VK_0..KeyEvent.VK_9 -> keyCode.toChar().toString()
+    in KeyEvent.VK_A..KeyEvent.VK_Z -> keyCode.toChar().toString()
+    else -> null
   }
 
   fun getShortcuts(vararg keys: String): CustomShortcutSet {

@@ -94,6 +94,8 @@ final class IdeaFreezeReporter implements IdePerformanceListener {
 
               addDumpsAttachments(dumps, Function.identity(), attachments);
 
+              FreezeProfiler.EP_NAME.forEachExtensionSafe(p -> attachments.addAll(p.getAttachments(dir)));
+
               if (message != null && throwable != null && !attachments.isEmpty()) {
                 IdeaLoggingEvent event = LogMessage.createEvent(throwable, message, attachments.toArray(Attachment.EMPTY_ARRAY));
                 setAppInfo(event, appInfo);
@@ -142,14 +144,21 @@ final class IdeaFreezeReporter implements IdePerformanceListener {
   }
 
   @Override
-  public void uiFreezeStarted() {
+  public void uiFreezeStarted(@NotNull File reportDir) {
     if (DEBUG || !DebugAttachDetector.isAttached()) {
       if (myDumpTask != null) {
         myDumpTask.stop();
       }
       reset();
       myDumpTask = new SamplingTask(Registry.intValue("freeze.reporter.dump.interval.ms"),
-                                    Registry.intValue("freeze.reporter.dump.duration.s") * 1000);
+                                    Registry.intValue("freeze.reporter.dump.duration.s") * 1000) {
+        @Override
+        public void stop() {
+          super.stop();
+          FreezeProfiler.EP_NAME.forEachExtensionSafe(FreezeProfiler::stop);
+        }
+      };
+      FreezeProfiler.EP_NAME.forEachExtensionSafe(p -> p.start(reportDir));
     }
   }
 
@@ -196,6 +205,11 @@ final class IdeaFreezeReporter implements IdePerformanceListener {
     }
     myDumpTask.stop();
 
+    List<Attachment> extraAttachments = new ArrayList<>();
+    if (reportDir != null) {
+      FreezeProfiler.EP_NAME.forEachExtensionSafe(p -> extraAttachments.addAll(p.getAttachments(reportDir)));
+    }
+
     cleanup(reportDir);
 
     if (Registry.is("freeze.reporter.enabled")) {
@@ -209,6 +223,7 @@ final class IdeaFreezeReporter implements IdePerformanceListener {
           !ContainerUtil.isEmpty(myStacktraceCommonPart)) {
         List<Attachment> attachments = new ArrayList<>();
         addDumpsAttachments(myCurrentDumps, ThreadDump::getRawDump, attachments);
+        attachments.addAll(extraAttachments);
 
         report(createEvent(lengthInSeconds, attachments, myDumpTask, reportDir, true));
       }
@@ -339,9 +354,9 @@ final class IdeaFreezeReporter implements IdePerformanceListener {
       if (DebugAttachDetector.isDebugEnabled()) {
         message += ", debug agent: on";
       }
-      double averageLoad = dumpTask.getOsAverageLoad();
-      if (averageLoad > 0) {
-        message += ", load average: " + String.format("%.2f", averageLoad);
+      double processCpuLoad = dumpTask.getProcessCpuLoad();
+      if (processCpuLoad > 0) {
+        message += ", cpu load: " + (int)(processCpuLoad * 100) + "%";
       }
       if (nonEdtCause) {
         message += "\n\nThe stack is from the thread that was blocking EDT";

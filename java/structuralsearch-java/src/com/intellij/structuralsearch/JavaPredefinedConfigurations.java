@@ -5,8 +5,7 @@ import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.structuralsearch.plugin.ui.Configuration;
 import org.jetbrains.annotations.NotNull;
 
-import static com.intellij.structuralsearch.PredefinedConfigurationUtil.createLegacyConfiguration;
-import static com.intellij.structuralsearch.PredefinedConfigurationUtil.createLegacyNonRecursiveConfiguration;
+import static com.intellij.structuralsearch.PredefinedConfigurationUtil.*;
 
 /**
  * @author Bas Leijdekkers
@@ -52,6 +51,9 @@ final class JavaPredefinedConfigurations {
       createLegacyConfiguration(SSRBundle.message("predefined.configuration.deprecated.method.calls"), "method calls to deprecated methods",
                                 "'_Instance?.'MethodCall:[ref( deprecated methods )]('_Parameter*)",
                                 getExpressionType(), JavaFileType.INSTANCE),
+      createConfiguration(SSRBundle.message("predefined.configuration.pattern.matching.instanceof"), "Pattern matching instanceof",
+                          "$operand$ instanceof $Type$ $var$",
+                          getExpressionType(), JavaFileType.INSTANCE),
 
       // Operators
       createLegacyConfiguration(SSRBundle.message("predefined.configuration.block.dcls"), "block dcls",
@@ -154,6 +156,9 @@ final class JavaPredefinedConfigurations {
       createLegacyConfiguration(SSRBundle.message("predefined.configuration.enums"), "enums",
                                 "enum 'Enum {}",
                                 getClassType(), JavaFileType.INSTANCE),
+      createConfiguration(SSRBundle.message("predefined.configuration.records"), "Records",
+                          "record 'Record('_Type '_component*) {}",
+                          getClassType(), JavaFileType.INSTANCE),
       createLegacyConfiguration(SSRBundle.message("predefined.configuration.class.with.parameterless.constructors"),
                                 "classes with parameterless constructors",
                                 "class 'Class {\n  '_Method{0,0}('_ParameterType '_Parameter+);\n}",
@@ -395,6 +400,15 @@ final class JavaPredefinedConfigurations {
                                 "methods \\& constructors with final parameters",
                                 "'_ReturnType? '_Method('_BeforeType '_BeforeParameter*, final '_ParameterType '_Parameter, '_AfterType '_AfterParameter*);",
                                 getInterestingType(), JavaFileType.INSTANCE, JavaStructuralSearchProfile.MEMBER_CONTEXT),
+      createConfiguration(SSRBundle.message("predefined.configuration.double.checked.locking"), "double-checked locking",
+                          "if ('_condition) {\n" +
+                          "  synchronized ('_lock) {\n" +
+                          "    if ('_condition) {\n" +
+                          "      '_statement+;\n" +
+                          "    }\n" +
+                          "  }\n" +
+                          "}",
+                          getInterestingType(), JavaFileType.INSTANCE),
       //createSearchTemplateInfo("methods called","'_?.'_:[ref('Method)] ('_*)", INTERESTING_TYPE),
       //createSearchTemplateInfo("fields selected","'_?.'_:[ref('Field)] ", INTERESTING_TYPE),
       //createSearchTemplateInfo("symbols used","'_:[ref('Symbol)] ", INTERESTING_TYPE),

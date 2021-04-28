@@ -30,7 +30,7 @@ public final class TextMateFileType extends LanguageFileType implements PlainTex
   @NotNull
   @Override
   public String getDescription() {
-    return TextMateBundle.message("textmate.filetype.description");
+    return TextMateBundle.message("filetype.textmate.description");
   }
 
   @NotNull
@@ -39,15 +39,10 @@ public final class TextMateFileType extends LanguageFileType implements PlainTex
     return "";
   }
 
-  @Nullable
+  @NotNull
   @Override
   public Icon getIcon() {
     return AllIcons.FileTypes.Text;
-  }
-
-  @Override
-  public boolean isReadOnly() {
-    return true;
   }
 
   @Override

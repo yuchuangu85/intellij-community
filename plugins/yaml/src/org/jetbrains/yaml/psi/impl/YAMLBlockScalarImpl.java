@@ -1,11 +1,14 @@
 package org.jetbrains.yaml.psi.impl;
 
+import com.intellij.codeInsight.intention.impl.QuickEditHandler;
 import com.intellij.lang.ASTNode;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.impl.source.tree.TreeUtil;
 import com.intellij.psi.tree.IElementType;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
+import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -17,6 +20,7 @@ import org.jetbrains.yaml.psi.YAMLBlockScalar;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 public abstract class YAMLBlockScalarImpl extends YAMLScalarImpl implements YAMLBlockScalar {
   protected static final int DEFAULT_CONTENT_INDENT = 2;
@@ -108,6 +112,19 @@ public abstract class YAMLBlockScalarImpl extends YAMLScalarImpl implements YAML
     return lastNonEmpty == -1 ? Collections.emptyList() : result.subList(0, lastNonEmpty + 1);
   }
 
+  protected int getFragmentEndOfLines(Set<QuickEditHandler> fragmentEditors) {
+    if (fragmentEditors.isEmpty()) return -1;
+    QuickEditHandler fe = ContainerUtil.getFirstItem(fragmentEditors);
+
+    CharSequence cs = fe.getFragmentDocument().getImmutableCharSequence();
+    int i = 0;
+    for (; i < cs.length(); i++) {
+      if (cs.charAt(cs.length() - i - 1) != '\n') break;
+    }
+    return i;
+  }
+  
+
   @Override
   public boolean hasExplicitIndent() {
     return getExplicitIndent() != IMPLICIT_INDENT;
@@ -142,10 +159,37 @@ public abstract class YAMLBlockScalarImpl extends YAMLScalarImpl implements YAML
     if (firstLine != null) {
       return YAMLUtil.getIndentInThisLine(firstLine.getPsi());
     }
+    else {
+      List<ASTNode> line = CollectionsKt.getOrNull(getLinesNodes(), 1);
+      if (line != null) {
+        ASTNode lineIndentElement = ContainerUtil.find(line, l -> l.getElementType().equals(YAMLTokenTypes.INDENT));
+        if (lineIndentElement != null) {
+          return lineIndentElement.getTextLength();
+        }
+      }
+    }
     return 0;
   }
 
-  /** See <a href="http://www.yaml.org/spec/1.2/spec.html#id2794534">8.1.1.2. Block Chomping Indicator</a>*/
+  protected @NotNull List<List<ASTNode>> getLinesNodes() {
+    List<List<ASTNode>> result = new SmartList<>();
+    List<ASTNode> currentLine = new SmartList<>();
+    for (ASTNode child = getNode().getFirstChildNode(); child != null; child = child.getTreeNext()) {
+      currentLine.add(child);
+      if (isEol(child)) {
+        result.add(currentLine);
+        currentLine = new SmartList<>();
+      }
+    }
+    if (!currentLine.isEmpty()) {
+      result.add(currentLine);
+    }
+    return result;
+  }
+
+  /**
+   * See <a href="http://www.yaml.org/spec/1.2/spec.html#id2794534">8.1.1.2. Block Chomping Indicator</a>
+   */
   @NotNull
   protected final ChompingIndicator getChompingIndicator() {
     Boolean forceKeepChomping = getContainingFile().getOriginalFile().getUserData(FORCE_KEEP_CHOMPING);

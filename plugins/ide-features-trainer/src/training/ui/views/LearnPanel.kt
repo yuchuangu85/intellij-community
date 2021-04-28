@@ -192,6 +192,10 @@ class LearnPanel(val learnToolWindow: LearnToolWindow) : JPanel() {
     }
   }
 
+  fun focusCurrentMessage() {
+    scrollToMessage(lessonMessagePane.getCurrentMessageRectangle())
+  }
+
   private fun scrollToMessage(needToShow: Rectangle?) {
     if (needToShow == null) return
 
@@ -311,6 +315,10 @@ class LearnPanel(val learnToolWindow: LearnToolWindow) : JPanel() {
   fun clearRestoreMessage() {
     val needToShow = lessonMessagePane.clearRestoreMessages()
     scrollToMessage(needToShow())
+  }
+
+  fun removeMessage(index: Int) {
+    lessonMessagePane.removeMessage(index)
   }
 
   class LinkLabelWithBackArrow<T>(linkListener: LinkListener<T>) : LinkLabel<T>("", null, linkListener) {

@@ -1,14 +1,10 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.keymap.impl;
 
 import com.intellij.diagnostic.EventWatcher;
 import com.intellij.diagnostic.LoadingState;
-import com.intellij.ide.DataManager;
-import com.intellij.ide.IdeBundle;
-import com.intellij.ide.IdeEventQueue;
-import com.intellij.ide.KeyboardAwareFocusOwner;
+import com.intellij.ide.*;
 import com.intellij.ide.impl.DataManagerImpl;
-import com.intellij.openapi.Disposable;
 import com.intellij.openapi.MnemonicHelper;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.actionSystem.ex.ActionManagerEx;
@@ -48,6 +44,7 @@ import com.intellij.ui.speedSearch.SpeedSearchSupply;
 import com.intellij.util.Alarm;
 import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.ReflectionUtil;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.text.KeyboardLayoutUtil;
 import com.intellij.util.ui.MacUIUtil;
 import com.intellij.util.ui.UIUtil;
@@ -78,7 +75,7 @@ import java.util.function.Function;
  * @author Anton Katilin
  * @author Vladimir Kondratyev
  */
-public final class IdeKeyEventDispatcher implements Disposable {
+public final class IdeKeyEventDispatcher {
   private static final Logger LOG = Logger.getInstance(IdeKeyEventDispatcher.class);
 
   private KeyStroke myFirstKeyStroke;
@@ -92,7 +89,6 @@ public final class IdeKeyEventDispatcher implements Disposable {
   private KeyState myState = KeyState.STATE_INIT;
 
   private final PresentationFactory myPresentationFactory = new PresentationFactory();
-  private boolean myDisposed;
   private boolean myLeftCtrlPressed;
   private boolean myRightAltPressed;
 
@@ -110,15 +106,8 @@ public final class IdeKeyEventDispatcher implements Disposable {
     }
   };
 
-
-  public IdeKeyEventDispatcher(@Nullable IdeEventQueue queue){
+  public IdeKeyEventDispatcher(@Nullable IdeEventQueue queue) {
     myQueue = queue;
-
-    // Application is null on early start when e.g. license dialog is shown
-    Application app = ApplicationManager.getApplication();
-    if (app != null) {
-      Disposer.register(app, this);
-    }
   }
 
   public boolean isWaitingForSecondKeyStroke() {
@@ -130,10 +119,6 @@ public final class IdeKeyEventDispatcher implements Disposable {
    * {@code IdeKeyEventDispatcher} and there is no need for any other processing of the event.
    */
   public boolean dispatchKeyEvent(KeyEvent e) {
-    if (myDisposed) {
-      return false;
-    }
-
     if (e.getID() == KeyEvent.KEY_PRESSED) {
       storeAsciiForChar(e);
     }
@@ -158,8 +143,11 @@ public final class IdeKeyEventDispatcher implements Disposable {
       myIgnoreNextKeyTypedEvent = false;
     }
 
-    if (isSpeedSearchEditing(e)) {
-      return false;
+    if (e.getKeyCode() == KeyEvent.VK_BACK_SPACE && focusOwner instanceof JComponent) {
+      SpeedSearchSupply supply = SpeedSearchSupply.getSupply((JComponent)focusOwner);
+      if (supply != null && supply.isPopupActive()) {
+        return false;
+      }
     }
 
     // http://www.jetbrains.net/jira/browse/IDEADEV-12372
@@ -189,12 +177,15 @@ public final class IdeKeyEventDispatcher implements Disposable {
       return false;
     }
 
-    if (id == KeyEvent.KEY_PRESSED &&
-        focusOwner instanceof JTextComponent &&
-        ((JTextComponent)focusOwner).isEditable() &&
-        e.getKeyChar() != KeyEvent.CHAR_UNDEFINED &&
-        e.getKeyCode() != KeyEvent.VK_ESCAPE) {
-      MacUIUtil.hideCursor();
+    if (getState() == KeyState.STATE_INIT && e.getKeyChar() != KeyEvent.CHAR_UNDEFINED &&
+        focusOwner instanceof JTextComponent && ((JTextComponent)focusOwner).isEditable()) {
+      if (id == KeyEvent.KEY_PRESSED && e.getKeyCode() != KeyEvent.VK_ESCAPE) {
+        MacUIUtil.hideCursor();
+      }
+      if (e.getModifiersEx() == 0 && Character.isLetterOrDigit(e.getKeyChar()) &&
+          !Boolean.TRUE.equals(((JTextComponent)focusOwner).getClientProperty(ActionUtil.ALLOW_PlAIN_LETTER_SHORTCUTS))) {
+        return false;
+      }
     }
 
     MenuSelectionManager menuSelectionManager=MenuSelectionManager.defaultManager();
@@ -259,18 +250,6 @@ public final class IdeKeyEventDispatcher implements Disposable {
     if ((mods & ~InputEvent.SHIFT_MASK & ~InputEvent.SHIFT_DOWN_MASK) != 0) return;
 
     KeyboardLayoutUtil.storeAsciiForChar(e.getKeyCode(), aChar, KeyEvent.VK_A, KeyEvent.VK_Z);
-  }
-
-  private static boolean isSpeedSearchEditing(@NotNull KeyEvent e) {
-    int keyCode = e.getKeyCode();
-    if (keyCode == KeyEvent.VK_BACK_SPACE) {
-      Component owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-      if (owner instanceof JComponent) {
-        SpeedSearchSupply supply = SpeedSearchSupply.getSupply((JComponent)owner);
-        return supply != null && supply.isPopupActive();
-      }
-    }
-    return false;
   }
 
   /**
@@ -633,23 +612,25 @@ public final class IdeKeyEventDispatcher implements Disposable {
   }
 
   boolean processAction(@NotNull InputEvent e,
-                               @NotNull String place,
-                               @NotNull DataContext context,
-                               @NotNull List<AnAction> actions,
-                               @NotNull ActionProcessor processor,
-                               @NotNull PresentationFactory presentationFactory,
-                               @NotNull ActionManagerEx actionManager) {
+                        @NotNull String place,
+                        @NotNull DataContext context,
+                        @NotNull List<AnAction> actions,
+                        @NotNull ActionProcessor processor,
+                        @NotNull PresentationFactory presentationFactory,
+                        @NotNull ActionManagerEx actionManager) {
     if (actions.isEmpty()) return false;
     DataContext wrappedContext = Utils.wrapDataContext(context);
     Project project = CommonDataKeys.PROJECT.getData(wrappedContext);
     boolean dumb = project != null && DumbService.getInstance(project).isDumb();
 
     Map<Presentation, AnActionEvent> events = new ConcurrentHashMap<>();
-    List<AnActionEvent> wouldBeEnabledIfNotDumb = new ArrayList<>();
+    List<AnAction> wouldBeEnabledIfNotDumb = ContainerUtil.createLockFreeCopyOnWriteList();
     Trinity<AnAction, AnActionEvent, Long> chosen = Utils.runUpdateSessionForInputEvent(
       e, wrappedContext, place, processor, presentationFactory,
       event -> events.put(event.getPresentation(), event),
-      session -> doUpdateActionsInner(wrappedContext, actions, dumb, wouldBeEnabledIfNotDumb, session, events::get));
+      session -> Utils.tryInReadAction(
+        () -> rearrangeByPromoters(actions, Utils.freezeDataContext(wrappedContext, null))) ?
+                 doUpdateActionsInner(actions, dumb, wouldBeEnabledIfNotDumb, session, events::get) : null);
 
     doPerformActionInner(chosen, e, processor, wrappedContext, actionManager, project, wouldBeEnabledIfNotDumb, () -> {
       //invokeLater to make sure correct dataContext is taken from focus
@@ -663,22 +644,19 @@ public final class IdeKeyEventDispatcher implements Disposable {
   }
 
   @Nullable
-  private static Trinity<AnAction, AnActionEvent, Long> doUpdateActionsInner(@NotNull DataContext context,
-                                                                             @NotNull List<AnAction> actions,
+  private static Trinity<AnAction, AnActionEvent, Long> doUpdateActionsInner(@NotNull List<AnAction> actions,
                                                                              boolean dumb,
-                                                                             @NotNull List<? super AnActionEvent> wouldBeEnabledIfNotDumb,
+                                                                             @NotNull List<? super AnAction> wouldBeEnabledIfNotDumb,
                                                                              @NotNull UpdateSession session,
                                                                              @NotNull Function<? super Presentation, ? extends AnActionEvent> events) {
-    ReadAction.run(() -> rearrangeByPromoters(actions, context));
     for (AnAction action : actions) {
       long startedAt = System.currentTimeMillis();
 
       Presentation presentation = session.presentation(action);
-      AnActionEvent actionEvent = events.apply(presentation);
 
       if (dumb && !action.isDumbAware()) {
         if (!Boolean.FALSE.equals(presentation.getClientProperty(ActionUtil.WOULD_BE_ENABLED_IF_NOT_DUMB_MODE))) {
-          wouldBeEnabledIfNotDumb.add(actionEvent);
+          wouldBeEnabledIfNotDumb.add(action);
         }
         logTimeMillis(startedAt, action);
         continue;
@@ -687,7 +665,8 @@ public final class IdeKeyEventDispatcher implements Disposable {
         logTimeMillis(startedAt, action);
         continue;
       }
-      return Trinity.create(action, actionEvent, startedAt);
+      AnActionEvent event = Objects.requireNonNull(events.apply(presentation));
+      return Trinity.create(action, event, startedAt);
     }
     return null;
   }
@@ -698,18 +677,21 @@ public final class IdeKeyEventDispatcher implements Disposable {
                                     @NotNull DataContext context,
                                     @NotNull ActionManagerEx actionManager,
                                     @Nullable Project project,
-                                    @NotNull List<? extends AnActionEvent> wouldBeEnabledIfNotDumb,
+                                    @NotNull List<? extends AnAction> wouldBeEnabledIfNotDumb,
                                     @NotNull Runnable retryRunnable) {
     if (chosen != null) {
       AnAction action = chosen.first;
-      AnActionEvent actionEvent = chosen.second;
+      AnActionEvent actionEvent = chosen.second.withDataContext(context); // use not frozen data context
       long startedAt = chosen.third;
       processor.onUpdatePassed(e, action, actionEvent);
 
+      int eventCount = IdeEventQueue.getInstance().getEventCount();
       if (context instanceof DataManagerImpl.MyDataContext) { // this is not true for test data contexts
-        ((DataManagerImpl.MyDataContext)context).setEventCount(IdeEventQueue.getInstance().getEventCount());
+        ((DataManagerImpl.MyDataContext)context).setEventCount(eventCount);
       }
-      actionManager.fireBeforeActionPerformed(action, actionEvent.getDataContext(), actionEvent);
+      try (AccessToken ignore = ProhibitAWTEvents.start("fireBeforeActionPerformed")) {
+        actionManager.fireBeforeActionPerformed(action, actionEvent.getDataContext(), actionEvent);
+      }
       if (isContextComponentNotVisible(actionEvent)) {
         logTimeMillis(startedAt, action);
         return;
@@ -718,8 +700,11 @@ public final class IdeKeyEventDispatcher implements Disposable {
       if (e.getID() == KeyEvent.KEY_PRESSED) {
         myIgnoreNextKeyTypedEvent = true;
       }
-      ((TransactionGuardImpl)TransactionGuard.getInstance()).performUserActivity(
-        () -> processor.performAction(e, action, actionEvent));
+      LOG.assertTrue(eventCount == IdeEventQueue.getInstance().getEventCount(),
+                     "Event counts do not match: " + eventCount + " != " + IdeEventQueue.getInstance().getEventCount());
+      try (AccessToken ignore = ((TransactionGuardImpl)TransactionGuard.getInstance()).startActivity(true)) {
+        processor.performAction(e, action, actionEvent);
+      }
       actionManager.fireAfterActionPerformed(action, actionEvent.getDataContext(), actionEvent);
       logTimeMillis(startedAt, action);
       return;
@@ -756,14 +741,15 @@ public final class IdeKeyEventDispatcher implements Disposable {
     }, Conditions.or(expired, project.getDisposed()));
   }
 
-  private static @NotNull @Nls String getActionUnavailableMessage(@NotNull List<? extends AnActionEvent> actionEvents) {
+  private static @NotNull @Nls String getActionUnavailableMessage(@NotNull List<? extends AnAction> actions) {
     List<String> actionNames = new ArrayList<>();
-    for (AnActionEvent event : actionEvents) {
-      String s = event.getPresentation().getText();
+    for (AnAction action : actions) {
+      String s = action.getTemplateText();
       if (Strings.isNotEmpty(s)) {
         actionNames.add(s);
       }
     }
+    ContainerUtil.removeDuplicates(actionNames);
     if (actionNames.isEmpty()) {
       return getUnavailableMessage(IdeBundle.message("dumb.balloon.this.action"), false);
     }
@@ -842,7 +828,7 @@ public final class IdeKeyEventDispatcher implements Disposable {
     }
   }
 
-  private static void rearrangeByPromoters(List<AnAction> actions, DataContext context) {
+  private static boolean rearrangeByPromoters(List<AnAction> actions, DataContext context) {
     List<AnAction> readOnlyActions = Collections.unmodifiableList(actions);
     for (ActionPromoter promoter : getPromoters(actions)) {
       try {
@@ -856,6 +842,7 @@ public final class IdeKeyEventDispatcher implements Disposable {
         LOG.error(e);
       }
     }
+    return true;
   }
 
   @NotNull
@@ -939,11 +926,6 @@ public final class IdeKeyEventDispatcher implements Disposable {
 
   public KeyProcessorContext getContext() {
     return myContext;
-  }
-
-  @Override
-  public void dispose() {
-    myDisposed = true;
   }
 
   public KeyState getState() {

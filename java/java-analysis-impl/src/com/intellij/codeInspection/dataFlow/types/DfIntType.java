@@ -3,19 +3,20 @@ package com.intellij.codeInspection.dataFlow.types;
 
 import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeBinOp;
 import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeSet;
+import com.intellij.codeInspection.dataFlow.value.RelationType;
 import com.intellij.psi.PsiPrimitiveType;
 import com.intellij.psi.PsiType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public interface DfIntType extends DfIntegralType {
+public interface DfIntType extends DfJvmIntegralType {
   @Override
   @NotNull
   LongRangeSet getRange();
 
   @Override
   default boolean isSuperType(@NotNull DfType other) {
-    if (other == DfTypes.BOTTOM) return true;
+    if (other == DfType.BOTTOM) return true;
     if (!(other instanceof DfIntType)) return false;
     DfIntType intType = (DfIntType)other;
     return getRange().contains(intType.getRange()) &&
@@ -39,8 +40,8 @@ public interface DfIntType extends DfIntegralType {
   @NotNull
   @Override
   default DfType join(@NotNull DfType other) {
-    if (other == DfTypes.BOTTOM) return this;
-    if (!(other instanceof DfIntType)) return DfTypes.TOP;
+    if (other == DfType.BOTTOM) return this;
+    if (!(other instanceof DfIntType)) return DfType.TOP;
     LongRangeSet range = ((DfIntType)other).getRange().unite(getRange());
     LongRangeSet wideRange = ((DfIntType)other).getWideRange().unite(getWideRange());
     return DfTypes.intRange(range, wideRange);
@@ -49,8 +50,8 @@ public interface DfIntType extends DfIntegralType {
   @NotNull
   @Override
   default DfType meet(@NotNull DfType other) {
-    if (other == DfTypes.TOP) return this;
-    if (!(other instanceof DfIntType)) return DfTypes.BOTTOM;
+    if (other == DfType.TOP) return this;
+    if (!(other instanceof DfIntType)) return DfType.BOTTOM;
     LongRangeSet range = ((DfIntType)other).getRange().intersect(getRange());
     LongRangeSet wideRange = ((DfIntType)other).getWideRange().intersect(getWideRange());
     return DfTypes.intRange(range, wideRange);
@@ -60,6 +61,12 @@ public interface DfIntType extends DfIntegralType {
   default DfType widen() {
     LongRangeSet wideRange = getWideRange();
     return wideRange.equals(getRange()) ? this : DfTypes.intRange(wideRange);
+  }
+
+  @Override
+  @NotNull
+  default DfType fromRelation(@NotNull RelationType relationType) {
+    return DfTypes.intRangeClamped(getRange().fromRelation(relationType));
   }
 
   @NotNull

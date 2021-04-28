@@ -1,4 +1,4 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.containers
 
 import com.intellij.openapi.diagnostic.Logger
@@ -6,6 +6,7 @@ import com.intellij.util.SmartList
 import com.intellij.util.lang.CompoundRuntimeException
 import java.util.*
 import java.util.stream.Stream
+import kotlin.collections.ArrayDeque
 
 fun <K, V> MutableMap<K, MutableList<V>>.remove(key: K, value: V) {
   val list = get(key)
@@ -17,7 +18,7 @@ fun <K, V> MutableMap<K, MutableList<V>>.remove(key: K, value: V) {
 fun <K, V> MutableMap<K, MutableList<V>>.putValue(key: K, value: V) {
   val list = get(key)
   if (list == null) {
-    put(key, SmartList<V>(value))
+    put(key, SmartList(value))
   }
   else {
     list.add(value)
@@ -87,11 +88,7 @@ inline fun <T> Iterator<T>.forEachGuaranteed(operation: (T) -> Unit) {
 }
 
 inline fun <T> Collection<T>.forEachLoggingErrors(logger: Logger, operation: (T) -> Unit) {
-  return asSequence().forEachLoggingErrors(logger, operation)
-}
-
-inline fun <T> Sequence<T>.forEachLoggingErrors(logger: Logger, operation: (T) -> Unit) {
-  forEach {
+  asSequence().forEach {
     try {
       operation(it)
     }
@@ -99,6 +96,7 @@ inline fun <T> Sequence<T>.forEachLoggingErrors(logger: Logger, operation: (T) -
       logger.error(e)
     }
   }
+  return
 }
 
 inline fun <T, R : Any> Collection<T>.mapNotNullLoggingErrors(logger: Logger, operation: (T) -> R?): List<R> {
@@ -189,7 +187,7 @@ inline fun <T, R> Collection<T>.mapSmartSet(transform: (T) -> R): Set<R> {
 inline fun <T, R : Any> Collection<T>.mapSmartNotNull(transform: (T) -> R?): List<R> {
   val size = size
   return if (size == 1) {
-    transform(first())?.let { SmartList<R>(it) } ?: SmartList<R>()
+    transform(first())?.let { SmartList(it) } ?: SmartList()
   }
   else {
     mapNotNullTo(ArrayList(size), transform)
@@ -218,7 +216,7 @@ inline fun <T> Collection<T>.filterSmartMutable(predicate: (T) -> Boolean): Muta
   return filterTo(if (size <= 1) SmartList() else ArrayList(), predicate)
 }
 
-inline fun <reified E : Enum<E>, V> enumMapOf(): MutableMap<E, V> = EnumMap<E, V>(E::class.java)
+inline fun <reified E : Enum<E>, V> enumMapOf(): MutableMap<E, V> = EnumMap(E::class.java)
 
 fun <E> Collection<E>.toArray(empty: Array<E>): Array<E> {
   @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN", "UNCHECKED_CAST")
@@ -278,3 +276,70 @@ fun <T> Optional<T>.orNull(): T? = orElse(null)
 fun <T> Iterable<T>?.asJBIterable(): JBIterable<T> = JBIterable.from(this)
 
 fun <T> Array<T>?.asJBIterable(): JBIterable<T> = if (this == null) JBIterable.empty() else JBIterable.of(*this)
+
+/**
+ * Modify the elements of the array without creating a new array
+ *
+ * @return the array itself
+ */
+fun <T> Array<T>.mapInPlace(transform: (T) -> T): Array<T> {
+  for (i in this.indices) {
+    this[i] = transform(this[i])
+  }
+  return this
+}
+
+/**
+ * returns sequence of distinct nodes in breadth-first order.
+ */
+fun <Node> generateRecursiveSequence(initialSequence: Sequence<Node>, children: (Node) -> Sequence<Node>): Sequence<Node> {
+  return Sequence {
+    val initialIterator = initialSequence.iterator()
+    if (!initialIterator.hasNext()) emptySequence<Node>().iterator()
+    else object : Iterator<Node> {
+      private var currentNode: Node? = null
+      private var currentSequenceIterator: Iterator<Node>? = initialIterator
+
+      private val nextSequences = ArrayDeque<Sequence<Node>>()
+      private val visited = mutableSetOf<Node>()
+
+      private fun getNext(): Node? {
+        currentNode?.let { return it }
+
+        while (true) {
+          val iterator = getCurrentSequenceIterator() ?: return null
+
+          while (iterator.hasNext()) {
+            val next = iterator.next()
+            if (visited.add(next)) {
+              currentNode = next
+              return next
+            }
+          }
+
+          currentSequenceIterator = null
+        }
+      }
+
+      private fun getCurrentSequenceIterator(): Iterator<Node>? {
+        currentSequenceIterator?.let { return it }
+
+        val nextIterator = nextSequences.removeFirstOrNull()?.iterator() ?: return null
+        currentSequenceIterator = nextIterator
+
+        return nextIterator
+      }
+
+      override fun hasNext(): Boolean = getNext() != null
+
+      override fun next(): Node {
+        val node = getNext() ?: throw NoSuchElementException()
+
+        nextSequences += children(node)
+        currentNode = null
+
+        return node
+      }
+    }
+  }
+}

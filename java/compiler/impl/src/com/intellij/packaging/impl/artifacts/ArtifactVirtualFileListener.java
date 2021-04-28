@@ -10,6 +10,7 @@ import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
 import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent;
 import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent;
 import com.intellij.packaging.artifacts.Artifact;
+import com.intellij.packaging.artifacts.ArtifactManager;
 import com.intellij.packaging.artifacts.ModifiableArtifactModel;
 import com.intellij.packaging.impl.elements.FileOrDirectoryCopyPackagingElement;
 import com.intellij.psi.util.CachedValue;
@@ -21,11 +22,12 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Collection;
 import java.util.List;
 
-final class ArtifactVirtualFileListener implements BulkFileListener {
+public final class ArtifactVirtualFileListener implements BulkFileListener {
   private final CachedValue<MultiValuesMap<String, Artifact>> myParentPathsToArtifacts;
-  private final ArtifactManagerImpl myArtifactManager;
+  private final ArtifactManager myArtifactManager;
 
-  ArtifactVirtualFileListener(@NotNull Project project, @NotNull ArtifactManagerImpl artifactManager) {
+  public ArtifactVirtualFileListener(@NotNull Project project) {
+    ArtifactManager artifactManager = ArtifactManager.getInstance(project);
     myArtifactManager = artifactManager;
     myParentPathsToArtifacts =
       CachedValuesManager.getManager(project).createCachedValue(() -> {
@@ -53,7 +55,7 @@ final class ArtifactVirtualFileListener implements BulkFileListener {
   }
 
   @Override
-  public void after(@NotNull List<? extends VFileEvent> events) {
+  public void after(@NotNull List<? extends @NotNull VFileEvent> events) {
     for (VFileEvent event : events) {
       if (event instanceof VFileMoveEvent) {
         filePathChanged(((VFileMoveEvent)event).getOldPath(), event.getPath());

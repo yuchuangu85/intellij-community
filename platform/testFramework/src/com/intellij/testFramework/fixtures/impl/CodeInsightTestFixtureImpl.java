@@ -169,7 +169,7 @@ public class CodeInsightTestFixtureImpl extends BaseFixture implements CodeInsig
   private VirtualFile myFile;
 
   // Strong references to PSI files configured by the test (to avoid tree access assertions after PSI has been GC'ed)
-  private PsiFile myPsiFile;
+  @SuppressWarnings("unused") private PsiFile myPsiFile;
   private PsiFile[] myAllPsiFiles;
 
   private Editor myEditor;
@@ -202,7 +202,7 @@ public class CodeInsightTestFixtureImpl extends BaseFixture implements CodeInsig
     myAllPsiFiles = null;
   }
 
-  private static void addGutterIconRenderer(GutterMark renderer, int offset, @NotNull SortedMap<Integer, List<GutterMark>> result) {
+  private static void addGutterIconRenderer(GutterMark renderer, int offset, @NotNull Map<? super Integer, List<GutterMark>> result) {
     if (renderer == null) return;
 
     List<GutterMark> renderers = result.computeIfAbsent(offset, __ -> new SmartList<>());
@@ -263,6 +263,7 @@ public class CodeInsightTestFixtureImpl extends BaseFixture implements CodeInsig
           if (policy != null) {
             policy.waitForHighlighting(project, editor);
           }
+          IdentifierHighlighterPassFactory.waitForIdentifierHighlighting();
           infos.addAll(DaemonCodeAnalyzerImpl.getHighlights(editor.getDocument(), null, project));
           if (readEditorMarkupModel) {
             MarkupModelEx markupModel = (MarkupModelEx)editor.getMarkupModel();
@@ -1366,13 +1367,20 @@ public class CodeInsightTestFixtureImpl extends BaseFixture implements CodeInsig
   @Override
   public PsiFile configureByText(@NotNull final FileType fileType, @NotNull final String text) {
     assertInitialized();
-    final String extension = fileType.getDefaultExtension();
-    final FileTypeManager fileTypeManager = FileTypeManager.getInstance();
-    if (fileTypeManager.getFileTypeByExtension(extension) != fileType) {
-      WriteCommandAction.runWriteCommandAction(getProject(), () -> fileTypeManager.associateExtension(fileType, extension));
-    }
-    final String fileName = "aaa." + extension;
+    String extension = fileType.getDefaultExtension();
+    associateExtensionTemporarily(fileType, extension, getTestRootDisposable());
+    String fileName = "aaa." + extension;
     return configureByText(fileName, text);
+  }
+
+  public static void associateExtensionTemporarily(@NotNull FileType fileType,
+                                                   @NotNull String extension,
+                                                   @NotNull Disposable parentDisposable) {
+    FileTypeManager fileTypeManager = FileTypeManager.getInstance();
+    if (!fileType.equals(fileTypeManager.getFileTypeByExtension(extension))) {
+      WriteAction.runAndWait(() -> fileTypeManager.associateExtension(fileType, extension));
+      Disposer.register(parentDisposable, ()->WriteAction.runAndWait(() -> fileTypeManager.removeAssociatedExtension(fileType, extension)));
+    }
   }
 
   @Override
@@ -1534,6 +1542,9 @@ public class CodeInsightTestFixtureImpl extends BaseFixture implements CodeInsig
                                            boolean checkInfos,
                                            boolean checkWeakWarnings,
                                            boolean ignoreExtraHighlighting) {
+    if (myEditor == null) {
+      throw new IllegalStateException("Fixture is not configured. Call something like configureByFile() or configureByText()");
+    }
     ExpectedHighlightingData data = new ExpectedHighlightingData(
       myEditor.getDocument(), checkWarnings, checkWeakWarnings, checkInfos, ignoreExtraHighlighting, myMessageBundles);
     data.init();
@@ -1635,7 +1646,6 @@ public class CodeInsightTestFixtureImpl extends BaseFixture implements CodeInsig
   }
 
   @Override
-  @Nullable
   public PsiFile getFile() {
     return myFile != null ? ReadAction.compute(() -> PsiManager.getInstance(getProject()).findFile(myFile)) : null;
   }

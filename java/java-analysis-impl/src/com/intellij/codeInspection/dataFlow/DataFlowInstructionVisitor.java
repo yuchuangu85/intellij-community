@@ -2,9 +2,21 @@
 package com.intellij.codeInspection.dataFlow;
 
 import com.intellij.codeInspection.dataFlow.DataFlowInspectionBase.ConstantResult;
-import com.intellij.codeInspection.dataFlow.instructions.*;
+import com.intellij.codeInspection.dataFlow.java.DfaExpressionFactory;
+import com.intellij.codeInspection.dataFlow.java.JavaDfaInstructionVisitor;
+import com.intellij.codeInspection.dataFlow.jvm.JvmSpecialField;
+import com.intellij.codeInspection.dataFlow.jvm.descriptors.ThisDescriptor;
+import com.intellij.codeInspection.dataFlow.jvm.problems.*;
+import com.intellij.codeInspection.dataFlow.lang.DfaInterceptor;
+import com.intellij.codeInspection.dataFlow.lang.UnsatisfiedConditionProblem;
+import com.intellij.codeInspection.dataFlow.lang.ir.inst.InstanceofInstruction;
+import com.intellij.codeInspection.dataFlow.lang.ir.inst.Instruction;
+import com.intellij.codeInspection.dataFlow.lang.ir.inst.ReturnInstruction;
 import com.intellij.codeInspection.dataFlow.types.DfType;
-import com.intellij.codeInspection.dataFlow.value.*;
+import com.intellij.codeInspection.dataFlow.value.DfaTypeValue;
+import com.intellij.codeInspection.dataFlow.value.DfaValue;
+import com.intellij.codeInspection.dataFlow.value.DfaValueFactory;
+import com.intellij.codeInspection.dataFlow.value.DfaVariableValue;
 import com.intellij.codeInspection.util.OptionalUtil;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
@@ -31,7 +43,7 @@ import java.util.stream.Stream;
 
 import static com.intellij.util.ObjectUtils.tryCast;
 
-final class DataFlowInstructionVisitor extends StandardInstructionVisitor {
+final class DataFlowInstructionVisitor extends JavaDfaInstructionVisitor implements DfaInterceptor<PsiExpression> {
   private static final Logger LOG = Logger.getInstance(DataFlowInstructionVisitor.class);
   private final Map<NullabilityProblemKind.NullabilityProblem<?>, StateInfo> myStateInfos = new LinkedHashMap<>();
   private final Map<PsiTypeCastExpression, StateInfo> myClassCastProblems = new HashMap<>();
@@ -66,23 +78,25 @@ final class DataFlowInstructionVisitor extends StandardInstructionVisitor {
   }
 
   @Override
-  public DfaInstructionState[] visitAssign(AssignInstruction instruction, DataFlowRunner runner, DfaMemoryState memState) {
-    PsiExpression left = instruction.getLExpression();
-    if (left != null && !Boolean.FALSE.equals(mySameValueAssigned.get(left))) {
+  public void beforeAssignment(@NotNull DfaValue value,
+                               @NotNull DfaValue target,
+                               @NotNull DfaMemoryState memState,
+                               @Nullable PsiElement anchor) {
+    if (!(anchor instanceof PsiAssignmentExpression)) return;
+    PsiExpression left = ((PsiAssignmentExpression)anchor).getLExpression();
+    if (!Boolean.FALSE.equals(mySameValueAssigned.get(left))) {
       if (!left.isPhysical()) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Non-physical element in assignment instruction: " + left.getParent().getText(), new Throwable());
         }
       } else {
-        DfaValue value = memState.peek();
-        DfaValue target = memState.getStackValue(1);
         DfType dfType = memState.getDfType(value);
-        if (target != null && memState.areEqual(value, target) &&
+        // Reporting strings is skipped because string reassignment might be intentionally used to deduplicate the heap objects
+        // (we compare strings by contents)
+        if (memState.areEqual(value, target) &&
             !isFloatingZero(dfType.getConstantOfType(Number.class)) &&
-            // Reporting strings is skipped because string reassignment might be intentionally used to deduplicate the heap objects
-            // (we compare strings by contents)
             !(TypeUtils.isJavaLangString(left.getType()) && !memState.isNull(value)) &&
-            !isAssignmentToDefaultValueInConstructor(instruction, runner, target)) {
+            !isAssignmentToDefaultValueInConstructor(target, ((PsiAssignmentExpression)anchor).getRExpression())) {
           mySameValueAssigned.merge(left, Boolean.TRUE, Boolean::logicalAnd);
         }
         else {
@@ -90,36 +104,34 @@ final class DataFlowInstructionVisitor extends StandardInstructionVisitor {
         }
       }
     }
-    return super.visitAssign(instruction, runner, memState);
+
   }
 
   @Override
-  protected void beforeConditionalJump(ConditionalGotoInstruction instruction, boolean isTrueBranch) {
-    PsiExpression anchor = instruction.getPsiAnchor();
-    if (anchor != null && PsiImplUtil.getSwitchLabel(anchor) != null) {
-      mySwitchLabelsReachability.merge(anchor, ThreeState.fromBoolean(isTrueBranch), ThreeState::merge);
+  public void beforeConditionalJump(@NotNull PsiElement anchor, boolean isTrueBranch) {
+    if (anchor instanceof PsiExpression && PsiImplUtil.getSwitchLabel((PsiExpression)anchor) != null) {
+      mySwitchLabelsReachability.merge((PsiExpression)anchor, ThreeState.fromBoolean(isTrueBranch), ThreeState::merge);
     }
   }
 
-  private static boolean isAssignmentToDefaultValueInConstructor(AssignInstruction instruction, DataFlowRunner runner, DfaValue target) {
+  private static boolean isAssignmentToDefaultValueInConstructor(DfaValue target, PsiExpression rExpression) {
     if (!(target instanceof DfaVariableValue)) return false;
     DfaVariableValue var = (DfaVariableValue)target;
-    if (!(var.getPsiVariable() instanceof PsiField) || var.getQualifier() == null ||
-        !(var.getQualifier().getDescriptor() instanceof DfaExpressionFactory.ThisDescriptor)) {
+    PsiField field = tryCast(var.getPsiVariable(), PsiField.class);
+    if (field == null || var.getQualifier() == null || !(var.getQualifier().getDescriptor() instanceof ThisDescriptor)) {
       return false;
     }
 
     // chained assignment like this.a = this.b = 0; is also supported
-    PsiExpression rExpression = instruction.getRExpression();
     while (rExpression instanceof PsiAssignmentExpression &&
            ((PsiAssignmentExpression)rExpression).getOperationTokenType().equals(JavaTokenType.EQ)) {
       rExpression = ((PsiAssignmentExpression)rExpression).getRExpression();
     }
-    DfaValue dest = runner.getFactory().createValue(rExpression);
+    DfaValue dest = DfaExpressionFactory.getExpressionDfaValue(var.getFactory(), rExpression);
     if (dest == null) return false;
     DfType dfType = dest.getDfType();
 
-    PsiType type = var.getType();
+    PsiType type = field.getType();
     boolean isDefaultValue = dfType.isConst(PsiTypesUtil.getDefaultValue(type)) ||
                              dfType.isConst(0) && TypeConversionUtil.isIntegralNumberType(type);
     if (!isDefaultValue) return false;
@@ -147,11 +159,6 @@ final class DataFlowInstructionVisitor extends StandardInstructionVisitor {
     return EntryStream.of(mySameArguments).filterValues(ArgResultEquality::hasEquality);
   }
 
-  @Override
-  protected void onTypeCast(PsiTypeCastExpression castExpression, DfaMemoryState state, boolean castPossible) {
-    myClassCastProblems.computeIfAbsent(castExpression, e -> new StateInfo()).update(state, ThreeState.fromBoolean(castPossible));
-  }
-
   StreamEx<NullabilityProblemKind.NullabilityProblem<?>> problems() {
     return EntryStream.of(myStateInfos).filterValues(StateInfo::shouldReport).mapKeyValue((np, si) -> si.unknown ? np.makeUnknown() : np);
   }
@@ -176,7 +183,7 @@ final class DataFlowInstructionVisitor extends StandardInstructionVisitor {
   Map<PsiMethodReferenceExpression, ConstantResult> getMethodReferenceResults() {
     return myMethodReferenceResults;
   }
-  
+
   Map<PsiExpression, ThreeState> getSwitchLabelsReachability() {
     return mySwitchLabelsReachability;
   }
@@ -220,10 +227,10 @@ final class DataFlowInstructionVisitor extends StandardInstructionVisitor {
   }
 
   @Override
-  protected void beforeExpressionPush(@NotNull DfaValue value,
-                                      @NotNull PsiExpression expression,
-                                      @Nullable TextRange range,
-                                      @NotNull DfaMemoryState memState) {
+  public void beforeExpressionPush(@NotNull DfaValue value,
+                                   @NotNull PsiExpression expression,
+                                   @Nullable TextRange range,
+                                   @NotNull DfaMemoryState memState) {
     if (!expression.isPhysical()) {
       Application application = ApplicationManager.getApplication();
       if (application.isEAP() || application.isInternal() || application.isUnitTestMode()) {
@@ -255,24 +262,31 @@ final class DataFlowInstructionVisitor extends StandardInstructionVisitor {
   }
 
   @Override
-  protected void beforeMethodReferenceResultPush(@NotNull DfaValue value,
-                                                 @NotNull PsiMethodReferenceExpression methodRef,
-                                                 @NotNull DfaMemoryState state) {
-    if (OptionalUtil.OPTIONAL_OF_NULLABLE.methodReferenceMatches(methodRef)) {
-      processOfNullableResult(value, state, methodRef.getReferenceNameElement());
+  public void beforeValueReturn(@NotNull DfaValue value,
+                                @Nullable PsiExpression expression,
+                                @NotNull PsiElement context,
+                                @NotNull DfaMemoryState state) {
+    if (context instanceof PsiMethod || context instanceof PsiLambdaExpression) {
+      myAlwaysReturnsNotNull = myAlwaysReturnsNotNull && state.isNotNull(value);
     }
-    PsiMethod method = tryCast(methodRef.resolve(), PsiMethod.class);
-    if (method != null && JavaMethodContractUtil.isPure(method)) {
-      List<StandardMethodContract> contracts = JavaMethodContractUtil.getMethodContracts(method);
-      if (contracts.isEmpty() || !contracts.get(0).isTrivial()) {
-        myMethodReferenceResults.compute(methodRef, (mr, curState) -> ConstantResult.mergeValue(curState, state, value));
+    else if (context instanceof PsiMethodReferenceExpression) {
+      var methodRef = (PsiMethodReferenceExpression)context;
+      if (OptionalUtil.OPTIONAL_OF_NULLABLE.methodReferenceMatches(methodRef)) {
+        processOfNullableResult(value, state, methodRef.getReferenceNameElement());
+      }
+      PsiMethod method = tryCast(methodRef.resolve(), PsiMethod.class);
+      if (method != null && JavaMethodContractUtil.isPure(method)) {
+        List<StandardMethodContract> contracts = JavaMethodContractUtil.getMethodContracts(method);
+        if (contracts.isEmpty() || !contracts.get(0).isTrivial()) {
+          myMethodReferenceResults.compute(methodRef, (mr, curState) -> ConstantResult.mergeValue(curState, state, value));
+        }
       }
     }
   }
 
   private void processOfNullableResult(@NotNull DfaValue value, @NotNull DfaMemoryState memState, PsiElement anchor) {
     DfaValueFactory factory = value.getFactory();
-    DfaValue optionalValue = SpecialField.OPTIONAL_VALUE.createValue(factory, value);
+    DfaValue optionalValue = JvmSpecialField.OPTIONAL_VALUE.createValue(factory, value);
     ThreeState present;
     if (memState.isNull(optionalValue)) {
       present = ThreeState.NO;
@@ -285,28 +299,34 @@ final class DataFlowInstructionVisitor extends StandardInstructionVisitor {
   }
 
   @Override
-  protected void processArrayAccess(PsiArrayAccessExpression expression, boolean alwaysOutOfBounds) {
-    myOutOfBoundsArrayAccesses.merge(expression, ThreeState.fromBoolean(alwaysOutOfBounds), ThreeState::merge);
-  }
-
-  @Override
-  protected void processArrayCreation(PsiExpression expression, boolean alwaysNegative) {
-    myNegativeArraySizes.merge(expression, ThreeState.fromBoolean(alwaysNegative), ThreeState::merge);
-  }
-
-  @Override
-  protected void processArrayStoreTypeMismatch(PsiAssignmentExpression assignmentExpression, PsiType fromType, PsiType toType) {
-    if (assignmentExpression != null) {
-      myArrayStoreProblems.put(assignmentExpression, Pair.create(fromType, toType));
+  public void onCondition(@NotNull UnsatisfiedConditionProblem problem,
+                          @NotNull DfaValue value,
+                          @NotNull ThreeState failed,
+                          @NotNull DfaMemoryState state) {
+    if (problem instanceof MutabilityProblem && failed == ThreeState.YES) {
+      reportMutabilityViolation(((MutabilityProblem)problem).isReceiver(), ((MutabilityProblem)problem).getAnchor());
+    }
+    else if (problem instanceof NegativeArraySizeProblem) {
+      myNegativeArraySizes.merge(((NegativeArraySizeProblem)problem).getAnchor(), failed, ThreeState::merge);
+    }
+    else if (problem instanceof ArrayIndexProblem) {
+      myOutOfBoundsArrayAccesses.merge(((ArrayIndexProblem)problem).getAnchor(), failed, ThreeState::merge);
+    }
+    else if (problem instanceof ClassCastProblem) {
+      myClassCastProblems.computeIfAbsent(((ClassCastProblem)problem).getAnchor(), e -> new StateInfo())
+        .update(state, ThreeState.fromBoolean(failed != ThreeState.YES));
+    }
+    else if (problem instanceof ArrayStoreProblem && failed == ThreeState.YES) {
+      myArrayStoreProblems.put(((ArrayStoreProblem)problem).getAnchor(),
+                               Pair.create(((ArrayStoreProblem)problem).getFromType(), ((ArrayStoreProblem)problem).getToType()));
     }
   }
 
   @Override
-  public DfaInstructionState[] visitEndOfInitializer(EndOfInitializerInstruction instruction, DataFlowRunner runner, DfaMemoryState state) {
-    if (!instruction.isStatic()) {
+  public void beforeInitializerEnd(boolean isStatic, @NotNull DfaMemoryState state) {
+    if (!isStatic) {
       myEndOfInitializerStates.add(state.createCopy());
     }
-    return super.visitEndOfInitializer(instruction, runner, state);
   }
 
   private static boolean hasTrivialFailContract(PsiCallExpression call) {
@@ -322,10 +342,6 @@ final class DataFlowInstructionVisitor extends StandardInstructionVisitor {
 
   @Override
   protected ThreeState checkNotNullable(DfaMemoryState state, @NotNull DfaValue value, @Nullable NullabilityProblemKind.NullabilityProblem<?> problem) {
-    if (problem != null && problem.getKind() == NullabilityProblemKind.nullableReturn && !state.isNotNull(value)) {
-      myAlwaysReturnsNotNull = false;
-    }
-
     ThreeState ok = super.checkNotNullable(state, value, problem);
     if (!myStrictMode && ok == ThreeState.UNSURE) {
       ok = ThreeState.YES;
@@ -336,8 +352,7 @@ final class DataFlowInstructionVisitor extends StandardInstructionVisitor {
     return ok;
   }
 
-  @Override
-  protected void reportMutabilityViolation(boolean receiver, @NotNull PsiElement anchor) {
+  private void reportMutabilityViolation(boolean receiver, @NotNull PsiElement anchor) {
     if (receiver) {
       if (anchor instanceof PsiMethodReferenceExpression) {
         anchor = ((PsiMethodReferenceExpression)anchor).getReferenceNameElement();
@@ -441,7 +456,7 @@ final class DataFlowInstructionVisitor extends StandardInstructionVisitor {
       return myRange == null ? text : myRange.substring(text);
     }
   }
-  
+
   static class ArgResultEquality {
     boolean argsEqual;
     boolean firstArgEqualToResult;
@@ -457,7 +472,7 @@ final class DataFlowInstructionVisitor extends StandardInstructionVisitor {
       return new ArgResultEquality(argsEqual && other.argsEqual, firstArgEqualToResult && other.firstArgEqualToResult,
                                    secondArgEqualToResult && other.secondArgEqualToResult);
     }
-    
+
     boolean hasEquality() {
       return argsEqual || firstArgEqualToResult || secondArgEqualToResult;
     }

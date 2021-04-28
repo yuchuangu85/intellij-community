@@ -1,4 +1,4 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.index.ui
 
 import com.intellij.dvcs.ui.RepositoryChangesBrowserNode
@@ -15,11 +15,8 @@ import com.intellij.openapi.ui.Splitter
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vcs.AbstractVcsHelper
 import com.intellij.openapi.vcs.VcsBundle
-import com.intellij.openapi.vcs.changes.ChangeListListener
-import com.intellij.openapi.vcs.changes.ChangeListManagerImpl
+import com.intellij.openapi.vcs.changes.*
 import com.intellij.openapi.vcs.changes.ChangesViewManager.createTextStatusFactory
-import com.intellij.openapi.vcs.changes.EditorTabPreview
-import com.intellij.openapi.vcs.changes.InclusionListener
 import com.intellij.openapi.vcs.changes.ui.*
 import com.intellij.openapi.vcs.changes.ui.ChangesGroupingSupport.Companion.REPOSITORY_GROUPING
 import com.intellij.openapi.vcs.checkin.CheckinHandler
@@ -62,13 +59,13 @@ import git4idea.merge.GitDefaultMergeDialogCustomizer
 import git4idea.merge.GitMergeUtil
 import git4idea.repo.GitRepository
 import git4idea.repo.GitRepositoryManager
-import git4idea.status.GitChangeProvider
+import git4idea.status.GitRefreshListener
+import org.jetbrains.annotations.NonNls
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
 import java.util.*
 import java.util.stream.Collectors
 import javax.swing.JPanel
-import org.jetbrains.annotations.NonNls
 
 internal class GitStagePanel(private val tracker: GitStageTracker,
                              isVertical: Boolean,
@@ -155,11 +152,11 @@ internal class GitStagePanel(private val tracker: GitStageTracker,
 
     tracker.addListener(MyGitStageTrackerListener(), this)
     val busConnection = project.messageBus.connect(this)
-    busConnection.subscribe(GitChangeProvider.TOPIC, MyGitChangeProviderListener())
+    busConnection.subscribe(GitRefreshListener.TOPIC, MyGitChangeProviderListener())
     busConnection.subscribe(ChangeListListener.TOPIC, MyChangeListListener())
     commitWorkflowHandler.workflow.addListener(MyCommitWorkflowListener(), this)
 
-    if (GitVcs.getInstance(project).changeProvider?.isRefreshInProgress == true) {
+    if (isRefreshInProgress()) {
       tree.setEmptyText(message("stage.loading.status"))
       progressStripe.startLoadingImmediately()
     }
@@ -168,6 +165,14 @@ internal class GitStagePanel(private val tracker: GitStageTracker,
     Disposer.register(disposableParent, this)
 
     runInEdtAsync(this) { update() }
+  }
+
+  private fun isRefreshInProgress(): Boolean {
+    if (GitVcs.getInstance(project).changeProvider!!.isRefreshInProgress) return true
+    return GitRepositoryManager.getInstance(project).repositories.any {
+      it.untrackedFilesHolder.isInUpdateMode ||
+      it.ignoredFilesHolder.isInUpdateMode()
+    }
   }
 
   private fun updateChangesStatusPanel() {
@@ -190,6 +195,7 @@ internal class GitStagePanel(private val tracker: GitStageTracker,
 
   override fun getData(dataId: String): Any? {
     if (QuickActionProvider.KEY.`is`(dataId)) return toolbar
+    if (EditorTabDiffPreviewManager.EDITOR_TAB_DIFF_PREVIEW.`is`(dataId)) return editorTabPreview
     return null
   }
 
@@ -237,6 +243,8 @@ internal class GitStagePanel(private val tracker: GitStageTracker,
     private val includedRootsListeners = EventDispatcher.create(IncludedRootsListener::class.java)
 
     init {
+      isShowCheckboxes = true
+
       setInclusionModel(GitStageRootInclusionModel(project, tracker, this@GitStagePanel))
       groupingSupport.addPropertyChangeListener(PropertyChangeListener {
         includedRootsListeners.multicaster.includedRootsChanged()
@@ -305,7 +313,7 @@ internal class GitStagePanel(private val tracker: GitStageTracker,
     }
 
     fun getIncludedRoots(): Collection<VirtualFile> {
-      if (!isInclusionEnabled()) return state.rootStates.keys
+      if (!isInclusionEnabled()) return state.allRoots
 
       return inclusionModel.getInclusion().mapNotNull { (it as? GitRepository)?.root }
     }
@@ -324,15 +332,13 @@ internal class GitStagePanel(private val tracker: GitStageTracker,
       return isInclusionEnabled() && node is RepositoryChangesBrowserNode && isUnderKind(node, NodeKind.STAGED)
     }
 
-    override fun isInclusionVisible(node: ChangesBrowserNode<*>): Boolean {
-      return isInclusionEnabled() && node is RepositoryChangesBrowserNode && isUnderKind(node, NodeKind.STAGED)
-    }
+    override fun isInclusionVisible(node: ChangesBrowserNode<*>): Boolean = isInclusionEnabled(node)
 
-    override fun getIncludableUserObjects(treeModelData: VcsTreeModelData): MutableList<Any> {
+    override fun getIncludableUserObjects(treeModelData: VcsTreeModelData): List<Any> {
       return treeModelData
         .rawNodesStream()
-        .filter { node: ChangesBrowserNode<*>? -> isIncludable(node!!) }
-        .map { node: ChangesBrowserNode<*> -> node.userObject }
+        .filter { node -> isIncludable(node) }
+        .map { node -> node.userObject }
         .collect(Collectors.toList())
     }
 
@@ -341,7 +347,7 @@ internal class GitStagePanel(private val tracker: GitStageTracker,
     }
 
     private fun isUnderKind(node: ChangesBrowserNode<*>, nodeKind: NodeKind): Boolean {
-      val nodePath = node.path?.takeIf { it.isNotEmpty() } ?: return false
+      val nodePath = node.path ?: return false
       return (nodePath.find { it is MyKindNode } as? MyKindNode)?.kind == nodeKind
     }
 
@@ -359,7 +365,7 @@ internal class GitStagePanel(private val tracker: GitStageTracker,
     }
   }
 
-  interface IncludedRootsListener: EventListener {
+  interface IncludedRootsListener : EventListener {
     fun includedRootsChanged()
   }
 
@@ -369,22 +375,29 @@ internal class GitStagePanel(private val tracker: GitStageTracker,
     }
   }
 
-  private inner class MyGitChangeProviderListener : GitChangeProvider.ChangeProviderListener {
+  private inner class MyGitChangeProviderListener : GitRefreshListener {
     override fun progressStarted() {
       runInEdt(this@GitStagePanel) {
-        tree.setEmptyText(message("stage.loading.status"))
-        progressStripe.startLoading()
+        updateProgressState()
       }
     }
 
     override fun progressStopped() {
       runInEdt(this@GitStagePanel) {
+        updateProgressState()
+      }
+    }
+
+    private fun updateProgressState() {
+      if (isRefreshInProgress()) {
+        tree.setEmptyText(message("stage.loading.status"))
+        progressStripe.startLoading()
+      }
+      else {
         progressStripe.stopLoading()
         tree.setEmptyText("")
       }
     }
-
-    override fun repositoryUpdated(repository: GitRepository) = Unit
   }
 
   private inner class MyChangeListListener : ChangeListListener {

@@ -75,10 +75,12 @@ class LessonManager {
 
   internal fun lessonIsRunning() : Boolean = currentLessonExecutor?.hasBeenStopped?.not() ?: false
 
-  internal fun stopLesson() {
+  fun stopLesson() = stopLesson(false)
+
+  private fun stopLesson(lessonPassed: Boolean) {
     shownRestoreNotification = null
     currentLessonExecutor?.takeIf { !it.hasBeenStopped }?.let {
-      it.lesson.onStop()
+      it.lesson.onStop(it.project, lessonPassed)
       it.stopLesson()
       currentLessonExecutor = null
     }
@@ -119,6 +121,10 @@ class LessonManager {
     learnPanel?.resetMessagesNumber(number)
   }
 
+  fun removeMessage(index: Int) {
+    learnPanel?.removeMessage(index)
+  }
+
   fun messagesNumber(): Int = learnPanel?.messagesNumber() ?: 0
 
   fun passExercise() {
@@ -130,7 +136,7 @@ class LessonManager {
     LearningUiHighlightingManager.clearHighlights()
     val learnPanel = learnPanel ?: return
     learnPanel.makeNextButtonSelected()
-    stopLesson()
+    stopLesson(true)
   }
 
 
@@ -185,6 +191,12 @@ class LessonManager {
   }
 
   fun lessonShouldBeOpenedCompleted(lesson: Lesson): Boolean = lesson.passed && currentLesson != lesson
+
+  fun focusTask() {
+    if (lessonIsRunning()) {
+      learnPanel?.focusCurrentMessage()
+    }
+  }
 
   companion object {
     @Volatile

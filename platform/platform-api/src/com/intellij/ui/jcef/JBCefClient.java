@@ -39,24 +39,32 @@ public final class JBCefClient implements JBCefDisposable {
   private static final Logger LOG = Logger.getInstance(JBCefClient.class);
 
   /**
-   * Defines the size of the pool used by {@link JBCefJSQuery} after a native browser has been created.
-   * <p>
-   * JCEF does not allow to register new JavaScript queries after a native browser has been created.
-   * To workaround this limitation a pool of JS query slots can be reserved ahead. One slot corresponds to
-   * a single {@link JBCefJSQuery} instance. The pool is not created by default unless it is explicitly
-   * requested via this property. The property should be added to a client before the first browser associated
-   * with the client is added to a UI hierarchy, otherwise it will have no effect.
-   *
    * @see #setProperty(String, Object)
    */
-  @NotNull public static final String JS_QUERY_POOL_SIZE = "JBCefClient.JSQuery.poolSize";
+  public static class Properties {
+    /**
+     * Defines the size of the pool used by {@link JBCefJSQuery} after a native browser has been created.
+     * <p>
+     * Accepts {@link Integer} values. JCEF does not allow to register new JavaScript queries after a native browser
+     * has been created. To workaround this limitation a pool of JS query slots can be reserved ahead. One slot
+     * corresponds to a single {@link JBCefJSQuery} instance. The pool is not created by default unless it is explicitly
+     * requested via this property. The property should be added to a client before the first browser associated
+     * with the client is added to a UI hierarchy, otherwise it will have no effect.
+     */
+    public static final @NotNull String JS_QUERY_POOL_SIZE = "JBCefClient.JSQuery.poolSize";
 
-  @NotNull private final PropertyChangeHelper myPropertyChangeHelper = new PropertyChangeHelper();
+    static {
+      PropertiesHelper.setType(JS_QUERY_POOL_SIZE, Integer.class);
+    }
+  }
 
-  private static final int JS_QUERY_SLOT_POOL_DEF_SIZE = RegistryManager.getInstance().intValue("ide.browser.jcef.jsQueryPoolSize");
-  private static final int JS_QUERY_SLOT_POOL_MAX_SIZE = 10000;
+  @NotNull private final PropertiesHelper myPropertiesHelper = new PropertiesHelper();
+
+  private static final int JS_QUERY_POOL_DEFAULT_SIZE = RegistryManager.getInstance().intValue("ide.browser.jcef.jsQueryPoolSize");
+  private static final int JS_QUERY_POOL_MAX_SIZE = 10000;
 
   @NotNull private final CefClient myCefClient;
+  private final boolean myIsDefault;
   @NotNull private final DisposeHelper myDisposeHelper = new DisposeHelper();
   @Nullable private volatile JSQueryPool myJSQueryPool;
   @NotNull private final AtomicInteger myJSQueryCounter = new AtomicInteger(0);
@@ -73,8 +81,9 @@ public final class JBCefClient implements JBCefDisposable {
   private final HandlerSupport<CefLoadHandler> myLoadHandler = new HandlerSupport<>();
   private final HandlerSupport<CefRequestHandler> myRequestHandler = new HandlerSupport<>();
 
-  JBCefClient(@NotNull CefClient client) {
+  JBCefClient(@NotNull CefClient client, boolean isDefault) {
     myCefClient = client;
+    myIsDefault = isDefault;
     Disposer.register(JBCefApp.getInstance().getDisposable(), this);
 
     Runnable createPool = () -> {
@@ -84,12 +93,12 @@ public final class JBCefClient implements JBCefDisposable {
       }
       myJSQueryPool = JSQueryPool.create(this);
     };
-    addPropertyChangeListener(JS_QUERY_POOL_SIZE, evt -> {
+    addPropertyChangeListener(Properties.JS_QUERY_POOL_SIZE, evt -> {
       if (evt.getNewValue() != null) {
         createPool.run();
       }
     });
-    if (JS_QUERY_SLOT_POOL_DEF_SIZE > 0) {
+    if (JS_QUERY_POOL_DEFAULT_SIZE > 0) {
       createPool.run();
     }
   }
@@ -97,6 +106,10 @@ public final class JBCefClient implements JBCefDisposable {
   @NotNull
   public CefClient getCefClient() {
     return myCefClient;
+  }
+
+  boolean isDefault() {
+    return myIsDefault;
   }
 
   @Override
@@ -117,18 +130,12 @@ public final class JBCefClient implements JBCefDisposable {
   }
 
   /**
-   * Supports the following properties:
-   * <ul>
-   * <li> {@link #JS_QUERY_POOL_SIZE}
-   * </ul>
+   * Supports {@link Properties}.
    *
    * @throws IllegalArgumentException if the value has wrong type or format
    */
   public void setProperty(@NotNull String name, @Nullable Object value) {
-    if (JS_QUERY_POOL_SIZE.equals(name) && !(value instanceof Integer)) {
-      throw new IllegalArgumentException("JBCefClient.JS_QUERY_POOL_SIZE should be java.lang.Integer");
-    }
-    myPropertyChangeHelper.setProperty(name, value);
+    myPropertiesHelper.setProperty(name, value);
   }
 
   /**
@@ -136,7 +143,7 @@ public final class JBCefClient implements JBCefDisposable {
    */
   @Nullable
   public Object getProperty(@NotNull String name) {
-    return myPropertyChangeHelper.getProperty(name);
+    return myPropertiesHelper.getProperty(name);
   }
 
   /**
@@ -144,14 +151,14 @@ public final class JBCefClient implements JBCefDisposable {
    */
   @SuppressWarnings("SameParameterValue")
   void addPropertyChangeListener(@NotNull String name, @NotNull PropertyChangeListener listener) {
-    myPropertyChangeHelper.addPropertyChangeListener(name, listener);
+    myPropertiesHelper.addPropertyChangeListener(name, listener);
   }
 
   /**
    * @see #setProperty(String, Object)
    */
   void removePropertyChangeListener(@NotNull String name, @NotNull PropertyChangeListener listener) {
-    myPropertyChangeHelper.removePropertyChangeListener(name, listener);
+    myPropertiesHelper.removePropertyChangeListener(name, listener);
   }
 
   @Nullable
@@ -169,10 +176,9 @@ public final class JBCefClient implements JBCefDisposable {
 
     @Nullable
     static JSQueryPool create(@NotNull JBCefClient client) {
-      Object size = client.getProperty(JS_QUERY_POOL_SIZE);
-      int poolSize = size instanceof Integer ? (Integer)size : JS_QUERY_SLOT_POOL_DEF_SIZE;
+      int poolSize = client.myPropertiesHelper.intValue(Properties.JS_QUERY_POOL_SIZE, JS_QUERY_POOL_DEFAULT_SIZE);
       if (poolSize > 0) {
-        poolSize = Math.min(poolSize, JS_QUERY_SLOT_POOL_MAX_SIZE);
+        poolSize = Math.min(poolSize, JS_QUERY_POOL_MAX_SIZE);
         return new JSQueryPool(client, poolSize);
       }
       return null;

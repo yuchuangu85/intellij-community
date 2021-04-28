@@ -1,4 +1,4 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.plugins;
 
 import com.intellij.core.CoreBundle;
@@ -18,7 +18,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 @ApiStatus.Internal
-final class PluginLoadingResult {
+public final class PluginLoadingResult {
+  public static final IdeaPluginDescriptorImpl[] EMPTY_ARRAY = new IdeaPluginDescriptorImpl[0];
+
   private final Map<PluginId, Set<String>> brokenPluginVersions;
   final @NotNull Supplier<BuildNumber> productBuildNumber;
 
@@ -64,7 +66,7 @@ final class PluginLoadingResult {
   }
 
   void finishLoading() {
-    IdeaPluginDescriptorImpl[] enabledPlugins = this.plugins.values().toArray(IdeaPluginDescriptorImpl.EMPTY_ARRAY);
+    IdeaPluginDescriptorImpl[] enabledPlugins = this.plugins.values().toArray(EMPTY_ARRAY);
     this.plugins.clear();
     Arrays.sort(enabledPlugins, Comparator.comparing(IdeaPluginDescriptorImpl::getPluginId));
     this.enabledPlugins = Arrays.asList(enabledPlugins);
@@ -109,7 +111,7 @@ final class PluginLoadingResult {
     error.register(pluginErrors);
   }
 
-  void reportCannotLoad(@NotNull Path file, Exception e) {
+  void reportCannotLoad(@NotNull Path file, Throwable e) {
     DescriptorListLoadingContext.LOG.warn("Cannot load " + file, e);
     globalErrors.add(() -> CoreBundle.message("plugin.loading.error.text.file.contains.invalid.plugin.descriptor",
                                                FileUtil.getLocationRelativeToUserHome(file.toString(), false)));
@@ -123,15 +125,17 @@ final class PluginLoadingResult {
       return true;
     }
 
-    if (descriptor.incomplete) {
+    if (descriptor.isIncomplete) {
       return true;
     }
 
     if (!descriptor.isBundled()) {
       if (checkModuleDependencies && !PluginManagerCore.hasModuleDependencies(descriptor)) {
-        PluginLoadingError.create(descriptor,
-                                  () -> CoreBundle.message("plugin.loading.error.long.compatible.with.intellij.idea.only", descriptor.getName()),
-                                  () -> CoreBundle.message("plugin.loading.error.short.compatible.with.intellij.idea.only")).register(pluginErrors);
+        PluginLoadingError error = PluginLoadingError.create(
+          descriptor,
+          () -> CoreBundle.message("plugin.loading.error.long.compatible.with.intellij.idea.only", descriptor.getName()),
+          () -> CoreBundle.message("plugin.loading.error.short.compatible.with.intellij.idea.only"));
+        addIncompletePlugin(descriptor, error);
         return false;
       }
     }

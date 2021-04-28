@@ -96,7 +96,7 @@ public abstract class AbstractTerminalRunner<T extends Process> {
    */
   @Deprecated
   @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
-  public T createProcess(@Nullable String directory) throws ExecutionException {
+  protected T createProcess(@Nullable String directory) throws ExecutionException {
     throw new AssertionError("Call createProcess(TerminalProcessOptions, JBTerminalWidget)");
   }
 
@@ -119,28 +119,28 @@ public abstract class AbstractTerminalRunner<T extends Process> {
   @NotNull
   protected JBTerminalWidget createTerminalWidget(@NotNull Disposable parent,
                                                   @Nullable VirtualFile currentWorkingDirectory,
-                                                  boolean deferSessionUntilFirstShown) {
+                                                  boolean deferSessionStartUntilUiShown) {
 
     return createTerminalWidget(parent,
                                 (terminalWidget) -> openSessionForFile(terminalWidget, currentWorkingDirectory),
-                                true);
+                                deferSessionStartUntilUiShown);
   }
 
   @NotNull
   protected JBTerminalWidget createTerminalWidget(@NotNull Disposable parent,
                                                   @Nullable String currentWorkingDirectory,
-                                                  boolean deferSessionUntilFirstShown) {
+                                                  boolean deferSessionStartUntilUiShown) {
 
     return createTerminalWidget(parent,
                                 (terminalWidget) -> openSessionInDirectory(terminalWidget, currentWorkingDirectory),
-                                true);
+                                deferSessionStartUntilUiShown);
   }
 
   private JBTerminalWidget createTerminalWidget(@NotNull Disposable parent,
                                                 @NotNull Consumer<JBTerminalWidget> openSession,
-                                                boolean deferSessionUntilFirstShown) {
+                                                boolean deferSessionStartUntilUiShown) {
     JBTerminalWidget terminalWidget = new ShellTerminalWidget(myProject, mySettingsProvider, parent);
-    if (deferSessionUntilFirstShown) {
+    if (deferSessionStartUntilUiShown) {
       UiNotifyConnector.doWhenFirstShown(terminalWidget, () -> openSession.accept(terminalWidget));
     }
     else {
@@ -180,10 +180,6 @@ public abstract class AbstractTerminalRunner<T extends Process> {
     showConsole(defaultExecutor, contentDescriptor, widget.getComponent());
 
     processHandler.startNotify();
-  }
-
-  public void openSession(@NotNull JBTerminalWidget terminal) {
-    openSessionInDirectory(terminal, null);
   }
 
   public @Nullable String getCurrentWorkingDir(@Nullable TerminalTabState state) {
@@ -233,6 +229,12 @@ public abstract class AbstractTerminalRunner<T extends Process> {
     return dir != null ? dir.getPath() : null;
   }
 
+  /**
+   * @deprecated use {@link #createTerminalWidget(Disposable, String, boolean)} instead
+   */
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
+  @ApiStatus.Internal
   public void openSessionInDirectory(@NotNull JBTerminalWidget terminalWidget,
                                      @Nullable String directory) {
     ModalityState modalityState = ModalityState.stateForComponent(terminalWidget.getComponent());

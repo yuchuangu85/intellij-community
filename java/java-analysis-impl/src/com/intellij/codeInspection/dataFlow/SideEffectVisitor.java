@@ -1,16 +1,27 @@
 // Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.dataFlow;
 
-import com.intellij.codeInspection.dataFlow.instructions.*;
+import com.intellij.codeInspection.dataFlow.java.JavaDfaInstructionVisitor;
+import com.intellij.codeInspection.dataFlow.lang.DfaInterceptor;
+import com.intellij.codeInspection.dataFlow.lang.UnsatisfiedConditionProblem;
+import com.intellij.codeInspection.dataFlow.lang.ir.inst.*;
 import com.intellij.codeInspection.dataFlow.value.DfaValue;
 import com.intellij.codeInspection.dataFlow.value.DfaVariableValue;
+import com.intellij.psi.PsiExpression;
+import com.intellij.util.ThreeState;
 import org.jetbrains.annotations.NotNull;
 
 /**
  * A visitor which cancels a dataflow once side effect occurs
  * @see DataFlowRunner#cancel()
  */
-public class SideEffectVisitor extends StandardInstructionVisitor {
+public class SideEffectVisitor extends JavaDfaInstructionVisitor implements DfaInterceptor<PsiExpression> {
+  private final @NotNull DataFlowRunner myRunner;
+
+  protected SideEffectVisitor(@NotNull DataFlowRunner runner) {
+    myRunner = runner;
+  }
+  
   /**
    * Override this method to allow some variable modifications which do not count as side effects
    *
@@ -40,6 +51,16 @@ public class SideEffectVisitor extends StandardInstructionVisitor {
   }
 
   @Override
+  public void onCondition(@NotNull UnsatisfiedConditionProblem problem,
+                          @NotNull DfaValue value,
+                          @NotNull ThreeState failed,
+                          @NotNull DfaMemoryState state) {
+    if (failed != ThreeState.NO) {
+      myRunner.cancel();
+    }
+  }
+
+  @Override
   public DfaInstructionState @NotNull [] visitControlTransfer(@NotNull ControlTransferInstruction instruction,
                                                               @NotNull DataFlowRunner runner, @NotNull DfaMemoryState state) {
     if (instruction instanceof ReturnInstruction && (((ReturnInstruction)instruction).getAnchor() != null ||
@@ -61,9 +82,7 @@ public class SideEffectVisitor extends StandardInstructionVisitor {
 
   @Override
   public DfaInstructionState[] visitAssign(AssignInstruction instruction, DataFlowRunner runner, DfaMemoryState memState) {
-    DfaValue dest = memState.pop();
-    DfaValue src = memState.peek();
-    memState.push(dest);
+    DfaValue src = memState.getStackValue(1);
     if (!(src instanceof DfaVariableValue) || !isModificationAllowed((DfaVariableValue)src)) {
       runner.cancel();
     }

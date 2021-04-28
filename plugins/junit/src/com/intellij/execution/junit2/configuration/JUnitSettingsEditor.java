@@ -64,7 +64,7 @@ public class JUnitSettingsEditor extends JavaSettingsEditorBase<JUnitConfigurati
     scopeFragment.addSettingsEditorListener(editor -> {
 
       boolean disableModuleClasspath = testKind.disableModuleClasspath(scopeFragment.getSelectedVariant() == TestSearchScope.WHOLE_PROJECT);
-      moduleClasspath.setSelected(!disableModuleClasspath);
+      moduleClasspath.setSelected(!disableModuleClasspath && moduleClasspath.isInitiallyVisible(mySettings));
       if (disableModuleClasspath) {
         moduleClasspath.component().setSelectedModule(null);
       }
@@ -118,7 +118,8 @@ public class JUnitSettingsEditor extends JavaSettingsEditorBase<JUnitConfigurati
     testKind.addSettingsEditorListener(
       editor -> {
         int selectedType = testKind.getTestKind();
-        forkMode.setSelectedVariant(JUnitConfigurable.updateForkMethod(selectedType, forkMode.getSelectedVariant()));
+        forkMode.setSelectedVariant(JUnitConfigurable.updateForkMethod(selectedType, forkMode.getSelectedVariant(),
+                                                                       repeat.getSelectedVariant()));
         scopeFragment.setRemovable(selectedType == JUnitConfigurationModel.PATTERN ||
                                    selectedType == JUnitConfigurationModel.ALL_IN_PACKAGE ||
                                    selectedType == JUnitConfigurationModel.TAGS ||

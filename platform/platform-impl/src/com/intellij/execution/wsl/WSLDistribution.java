@@ -10,12 +10,15 @@ import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil;
 import com.intellij.execution.process.*;
 import com.intellij.ide.IdeBundle;
+import com.intellij.openapi.application.Application;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.Experiments;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.NlsSafe;
 import com.intellij.openapi.util.NullableLazyValue;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.util.text.Strings;
 import com.intellij.openapi.vfs.VfsUtil;
@@ -31,6 +34,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -131,6 +135,14 @@ public class WSLDistribution {
     if (processHandlerConsumer != null) {
       processHandlerConsumer.consume(processHandler);
     }
+    return processHandler.runProcess(timeout);
+  }
+
+  private @NotNull ProcessOutput executeOnWsl(@NotNull GeneralCommandLine commandLine,
+                                              @NotNull WSLCommandLineOptions options,
+                                              int timeout) throws ExecutionException {
+    patchCommandLine(commandLine, null, options);
+    CapturingProcessHandler processHandler = new CapturingProcessHandler(commandLine);
     return processHandler.runProcess(timeout);
   }
 
@@ -304,8 +316,8 @@ public class WSLDistribution {
   }
 
   private void logCommandLineBefore(@NotNull GeneralCommandLine commandLine, @NotNull WSLCommandLineOptions options) {
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("[" + getId() + "] " +
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("[" + getId() + "] " +
                 "Patching: " +
                 commandLine.getCommandLineString() +
                 "; options: " +
@@ -326,7 +338,7 @@ public class WSLDistribution {
     return file != null ? file.toPath() : null;
   }
 
-  private static @NotNull List<String> buildLinuxCommand(@NotNull GeneralCommandLine commandLine, boolean executeCommandInShell) {
+  public static @NotNull List<String> buildLinuxCommand(@NotNull GeneralCommandLine commandLine, boolean executeCommandInShell) {
     List<String> command = ContainerUtil.concat(List.of(commandLine.getExePath()), commandLine.getParametersList().getList());
     return new ArrayList<>(ContainerUtil.map(command, executeCommandInShell ? CommandLineUtil::posixQuote : Functions.identity()));
   }
@@ -569,11 +581,24 @@ public class WSLDistribution {
   }
 
   private @Nullable String readHostIp() {
+    String wsl1LoopbackAddress = getWsl1LoopbackAddress();
+    if (wsl1LoopbackAddress != null) {
+      return wsl1LoopbackAddress;
+    }
+    if (Registry.is("wsl.obtain.windows.host.ip.alternatively")) {
+      InetAddress wslAddr = getWslIpAddress();
+      try (DatagramSocket datagramSocket = new DatagramSocket()) {
+        datagramSocket.connect(wslAddr, 0);
+        return datagramSocket.getLocalAddress().getHostAddress();
+      }
+      catch (Exception e) {
+        LOG.error("Cannot obtain Windows host IP alternatively: failed to connect to WSL IP " + wslAddr + ". Fallback to default way.", e);
+      }
+    }
     final String releaseInfo = "/etc/resolv.conf"; // available for all distributions
     final ProcessOutput output;
     try {
-      output = executeOnWsl(List.of("cat", releaseInfo),
-                            new WSLCommandLineOptions().setExecuteCommandInShell(false), 10_000, null);
+      output = executeOnWsl(List.of("cat", releaseInfo), new WSLCommandLineOptions(), 10_000, null);
     }
     catch (ExecutionException e) {
       LOG.info("Cannot read host ip", e);
@@ -590,10 +615,13 @@ public class WSLDistribution {
   }
 
   private @Nullable String readWslIp() {
+    String wsl1LoopbackAddress = getWsl1LoopbackAddress();
+    if (wsl1LoopbackAddress != null) {
+      return wsl1LoopbackAddress;
+    }
     final ProcessOutput output;
     try {
-      output = executeOnWsl(List.of("ip", "addr", "show", "eth0"),
-                            new WSLCommandLineOptions().setExecuteCommandInShell(false), 10_000, null);
+      output = executeOnWsl(List.of("ip", "addr", "show", "eth0"), new WSLCommandLineOptions(), 10_000, null);
     }
     catch (ExecutionException e) {
       LOG.info("Cannot read wsl ip", e);
@@ -613,12 +641,16 @@ public class WSLDistribution {
     return null;
   }
 
+  private @Nullable String getWsl1LoopbackAddress() {
+    return WSLUtil.isWsl1(this) == ThreeState.YES ? InetAddress.getLoopbackAddress().getHostAddress() : null;
+  }
+
   public @NonNls @Nullable String getEnvironmentVariable(String name) {
     WSLCommandLineOptions options = new WSLCommandLineOptions()
       .setExecuteCommandInInteractiveShell(true)
       .setExecuteCommandInLoginShell(true)
       .setShellPath(getShellPath());
-    return executeInShellAndGetCommandOnlyStdout(List.of("printenv", name), options, DEFAULT_TIMEOUT, true);
+    return executeInShellAndGetCommandOnlyStdout(new GeneralCommandLine("printenv", name), options, DEFAULT_TIMEOUT, true);
   }
 
   public @NlsSafe @NotNull String getShellPath() {
@@ -627,46 +659,67 @@ public class WSLDistribution {
 
   private @NlsSafe @Nullable String readShellPath() {
     WSLCommandLineOptions options = new WSLCommandLineOptions().setExecuteCommandInDefaultShell(true);
-    return executeInShellAndGetCommandOnlyStdout(List.of("printenv", "SHELL"), options, DEFAULT_TIMEOUT, true);
+    return executeInShellAndGetCommandOnlyStdout(new GeneralCommandLine("printenv", "SHELL"), options, DEFAULT_TIMEOUT, true);
   }
 
-  @SuppressWarnings("SameParameterValue")
-  @Nullable String executeInShellAndGetCommandOnlyStdout(@NotNull List<String> command,
-                                                         @NotNull WSLCommandLineOptions options,
-                                                         int timeout,
-                                                         boolean oneLineStdoutExpected) {
-    options.setExecuteCommandInShell(true);
+  @NotNull ProcessOutput executeInShellAndGetCommandOnlyStdout(@NotNull GeneralCommandLine commandLine,
+                                                               @NotNull WSLCommandLineOptions options,
+                                                               int timeout) throws ExecutionException {
+    if (!options.isExecuteCommandInShell()) {
+      throw new AssertionError("Execution in shell is expected");
+    }
     // When command is executed in interactive/login shell, the result stdout may contain additional output
     // produced by shell configuration files, for example, "Message Of The Day".
     // Let's print some unique message before executing the command to know where command output begins in the result output.
     String prefixText = "intellij: executing command...";
     options.addInitCommand("echo " + CommandLineUtil.posixQuote(prefixText));
+    ProcessOutput output = executeOnWsl(commandLine, options, timeout);
+    String stdout = output.getStdout();
+    String markerText = prefixText + LineSeparator.LF.getSeparatorString();
+    int index = stdout.indexOf(markerText);
+    if (index < 0) {
+      Application application = ApplicationManager.getApplication();
+      if (application == null || application.isInternal() || application.isUnitTestMode()) {
+        LOG.error("Cannot find '" + prefixText + "' in stdout: " + output);
+      }
+      else {
+        LOG.info("Cannot find '" + prefixText + "' in stdout");
+      }
+      return output;
+    }
+    return new ProcessOutput(stdout.substring(index + markerText.length()),
+                             output.getStderr(),
+                             output.getExitCode(),
+                             output.isTimeout(),
+                             output.isCancelled());
+  }
+
+  @SuppressWarnings("SameParameterValue")
+  @Nullable String executeInShellAndGetCommandOnlyStdout(@NotNull GeneralCommandLine commandLine,
+                                                         @NotNull WSLCommandLineOptions options,
+                                                         int timeout,
+                                                         boolean expectOneLineStdout) {
     try {
-      ProcessOutput output = executeOnWsl(command, options, timeout, null);
+      ProcessOutput output = executeInShellAndGetCommandOnlyStdout(commandLine, options, timeout);
       String stdout = output.getStdout();
       if (!output.isTimeout() && output.getExitCode() == 0) {
-        String markerText = prefixText + LineSeparator.LF.getSeparatorString();
-        int index = stdout.indexOf(markerText);
-        if (index >= 0) {
-          String commandOwnStdout = stdout.substring(index + markerText.length());
-          return oneLineStdoutExpected ? expectOneLineOutput(command, commandOwnStdout) : commandOwnStdout;
-        }
+        return expectOneLineStdout ? expectOneLineOutput(commandLine, stdout) : stdout;
       }
-      LOG.info("Failed to execute " + command + " for " + getMsId() + ": " +
+      LOG.info("Failed to execute " + commandLine + " for " + getMsId() + ": " +
                "exitCode=" + output.getExitCode() + ", timeout=" + output.isTimeout() +
                ", stdout=" + stdout + ", stderr=" + output.getStderr());
     }
     catch (ExecutionException e) {
-      LOG.info("Failed to execute " + command + " for " + getMsId(), e);
+      LOG.info("Failed to execute " + commandLine + " for " + getMsId(), e);
     }
     return null;
   }
 
-  private @NotNull String expectOneLineOutput(@NotNull List<String> command, @NotNull String stdout) {
+  private @NotNull String expectOneLineOutput(@NotNull GeneralCommandLine commandLine, @NotNull String stdout) {
     String converted = StringUtil.convertLineSeparators(stdout, LineSeparator.LF.getSeparatorString());
     List<String> lines = StringUtil.split(converted, LineSeparator.LF.getSeparatorString(), true, true);
     if (lines.size() != 1) {
-      LOG.info("One line stdout expected: " + getMsId() + ", command=" + command + ", stdout=" + stdout + ", lines=" + lines.size());
+      LOG.info("One line stdout expected: " + getMsId() + ", command=" + commandLine + ", stdout=" + stdout + ", lines=" + lines.size());
     }
     return StringUtil.notNullize(ContainerUtil.getFirstItem(lines), stdout);
   }

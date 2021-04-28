@@ -8,7 +8,10 @@ import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.codeInspection.dataFlow.*;
-import com.intellij.codeInspection.dataFlow.instructions.MethodCallInstruction;
+import com.intellij.codeInspection.dataFlow.jvm.descriptors.PlainDescriptor;
+import com.intellij.codeInspection.dataFlow.lang.ir.ControlFlow;
+import com.intellij.codeInspection.dataFlow.lang.ir.inst.MethodCallInstruction;
+import com.intellij.codeInspection.dataFlow.types.DfTypes;
 import com.intellij.codeInspection.dataFlow.value.DfaValue;
 import com.intellij.codeInspection.dataFlow.value.DfaValueFactory;
 import com.intellij.codeInspection.dataFlow.value.DfaVariableValue;
@@ -160,15 +163,15 @@ public class CatchMayIgnoreExceptionInspection extends AbstractBaseJavaLocalInsp
         PsiClass exceptionClass = exception.resolve();
         if (exceptionClass == null) return false;
 
-        class CatchDataFlowRunner extends DataFlowRunner {
+        class CatchDataFlowRunner extends StandardDataFlowRunner {
           final DfaVariableValue myExceptionVar;
           final DfaVariableValue myStableExceptionVar;
 
           CatchDataFlowRunner() {
             super(holder.getProject(), block);
             DfaValueFactory factory = getFactory();
-            myExceptionVar = factory.getVarFactory().createVariableValue(parameter);
-            myStableExceptionVar = factory.getVarFactory().createVariableValue(new LightParameter("tmp", exception, block));
+            myExceptionVar = PlainDescriptor.createVariableValue(factory, parameter);
+            myStableExceptionVar = PlainDescriptor.createVariableValue(factory, new LightParameter("tmp", exception, block));
           }
 
           @NotNull
@@ -176,19 +179,16 @@ public class CatchMayIgnoreExceptionInspection extends AbstractBaseJavaLocalInsp
           protected List<DfaInstructionState> createInitialInstructionStates(@NotNull PsiElement psiBlock,
                                                                              @NotNull Collection<? extends DfaMemoryState> memStates,
                                                                              @NotNull ControlFlow flow) {
-            DfaValueFactory factory = getFactory();
-
             for (DfaMemoryState memState : memStates) {
               memState.applyCondition(myExceptionVar.eq(myStableExceptionVar));
-              memState.applyCondition(
-                myExceptionVar.cond(RelationType.IS, factory.getObjectType(exception, Nullability.NOT_NULL)));
+              memState.applyCondition(myExceptionVar.cond(RelationType.IS, DfTypes.typedObject(exception, Nullability.NOT_NULL)));
             }
             return super.createInitialInstructionStates(psiBlock, memStates, flow);
           }
         }
 
         CatchDataFlowRunner runner = new CatchDataFlowRunner();
-        StandardInstructionVisitor visitor = new IgnoredExceptionVisitor(parameter, block, exceptionClass, runner.myStableExceptionVar);
+        var visitor = new IgnoredExceptionVisitor(runner, parameter, block, exceptionClass, runner.myStableExceptionVar);
         return runner.analyzeCodeBlock(block, visitor) == RunnerResult.OK;
       }
     };
@@ -205,10 +205,12 @@ public class CatchMayIgnoreExceptionInspection extends AbstractBaseJavaLocalInsp
     @NonNls private final @NotNull List<PsiMethod> myMethods;
     private final @NotNull DfaVariableValue myExceptionVar;
 
-    IgnoredExceptionVisitor(@NotNull PsiParameter parameter,
-                                   @NotNull PsiCodeBlock block,
-                                   @NotNull PsiClass exceptionClass,
-                                   @NotNull DfaVariableValue exceptionVar) {
+    IgnoredExceptionVisitor(@NotNull DataFlowRunner runner,
+                            @NotNull PsiParameter parameter,
+                            @NotNull PsiCodeBlock block,
+                            @NotNull PsiClass exceptionClass,
+                            @NotNull DfaVariableValue exceptionVar) {
+      super(runner);
       myParameter = parameter;
       myBlock = block;
       myExceptionVar = exceptionVar;
@@ -225,7 +227,7 @@ public class CatchMayIgnoreExceptionInspection extends AbstractBaseJavaLocalInsp
         // Methods like "getCause" and "getMessage" return "null" for our test exception
         if (memState.areEqual(qualifier, myExceptionVar)) {
           memState.pop();
-          memState.push(runner.getFactory().getNull());
+          memState.push(runner.getFactory().fromDfType(DfTypes.NULL));
           return nextInstruction(instruction, runner, memState);
         }
       }
@@ -234,7 +236,7 @@ public class CatchMayIgnoreExceptionInspection extends AbstractBaseJavaLocalInsp
 
     @Override
     protected boolean isModificationAllowed(DfaVariableValue variable) {
-      PsiModifierListOwner owner = variable.getPsiVariable();
+      PsiElement owner = variable.getPsiVariable();
       return owner == myParameter || owner != null && PsiTreeUtil.isAncestor(myBlock, owner, false);
     }
   }

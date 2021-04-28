@@ -106,7 +106,7 @@ public class IdeDocumentHistoryImpl extends IdeDocumentHistory implements Dispos
     });
     busConnection.subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
       @Override
-      public void after(@NotNull List<? extends VFileEvent> events) {
+      public void after(@NotNull List<? extends @NotNull VFileEvent> events) {
         for (VFileEvent event : events) {
           if (event instanceof VFileDeleteEvent) {
             removeInvalidFilesFromStacks();
@@ -601,7 +601,7 @@ public class IdeDocumentHistoryImpl extends IdeDocumentHistory implements Dispos
 
     FileEditorManagerEx editorManager = getFileEditorManager();
     VirtualFile file = fileEditor.getFile();
-    LOG.assertTrue(file != null);
+    LOG.assertTrue(file != null, fileEditor.getClass().getName() + " getFile() returned null");
     FileEditorState state = fileEditor.getState(FileEditorStateLevel.NAVIGATION);
 
     return new PlaceInfo(file, state, fileProvider.getEditorTypeId(), editorManager.getCurrentWindow(), getCaretPosition(fileEditor),

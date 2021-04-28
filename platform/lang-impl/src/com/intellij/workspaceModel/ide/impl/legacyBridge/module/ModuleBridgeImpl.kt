@@ -1,10 +1,11 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.workspaceModel.ide.impl.legacyBridge.module
 
 import com.intellij.facet.FacetFromExternalSourcesStorage
 import com.intellij.facet.FacetManager
 import com.intellij.ide.plugins.IdeaPluginDescriptorImpl
 import com.intellij.ide.plugins.PluginManagerCore
+import com.intellij.openapi.application.Application
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.impl.ModuleImpl
@@ -22,7 +23,6 @@ import com.intellij.workspaceModel.storage.*
 import com.intellij.workspaceModel.storage.bridgeEntities.*
 import com.intellij.workspaceModel.storage.impl.VersionedEntityStorageOnStorage
 import com.intellij.workspaceModel.storage.url.VirtualFileUrl
-import org.picocontainer.MutablePicoContainer
 
 internal class ModuleBridgeImpl(
   override var moduleEntityId: ModuleId,
@@ -64,25 +64,23 @@ internal class ModuleBridgeImpl(
     super<ModuleImpl>.rename(newName, notifyStorage)
   }
 
-  override fun registerComponents(plugins: List<IdeaPluginDescriptorImpl>, listenerCallbacks: MutableList<Runnable>?) {
-    super.registerComponents(plugins, null)
+  override fun registerComponents(plugins: List<IdeaPluginDescriptorImpl>, app: Application?, listenerCallbacks: MutableList<Runnable>?) {
+    super.registerComponents(plugins, app, null)
 
-    val corePlugin = plugins.find { it.pluginId == PluginManagerCore.CORE_ID }
-    if (corePlugin != null) {
-      registerComponent(ModuleRootManager::class.java, ModuleRootComponentBridge::class.java, corePlugin, true)
-      registerComponent(FacetManager::class.java, FacetManagerBridge::class.java, corePlugin, true)
-      (picoContainer as MutablePicoContainer).unregisterComponent(DeprecatedModuleOptionManager::class.java)
+    val corePlugin = plugins.find { it.pluginId == PluginManagerCore.CORE_ID } ?: return
+    registerComponent(ModuleRootManager::class.java, ModuleRootComponentBridge::class.java, corePlugin, true)
+    registerComponent(FacetManager::class.java, FacetManagerBridge::class.java, corePlugin, true)
+    unregisterComponent(DeprecatedModuleOptionManager::class.java)
 
-      try { //todo improve
-        val apiClass = Class.forName("com.intellij.openapi.externalSystem.ExternalSystemModulePropertyManager", true, javaClass.classLoader)
-        val implClass = Class.forName("com.intellij.openapi.externalSystem.service.project.ExternalSystemModulePropertyManagerBridge", true,
-                                      javaClass.classLoader)
-        registerService(apiClass, implClass, corePlugin, true)
-      }
-      catch (ignored: Throwable) {
-      }
-      (picoContainer as MutablePicoContainer).unregisterComponent(FacetFromExternalSourcesStorage::class.java.name)
+    try { //todo improve
+      val apiClass = Class.forName("com.intellij.openapi.externalSystem.ExternalSystemModulePropertyManager", true, javaClass.classLoader)
+      val implClass = Class.forName("com.intellij.openapi.externalSystem.service.project.ExternalSystemModulePropertyManagerBridge", true,
+                                    javaClass.classLoader)
+      registerService(apiClass, implClass, corePlugin, true)
     }
+    catch (ignored: Throwable) {
+    }
+    unregisterComponent(FacetFromExternalSourcesStorage::class.java.name)
   }
 
   override fun getOptionValue(key: String): String? {
@@ -96,7 +94,7 @@ internal class ModuleBridgeImpl(
   override fun setOption(key: String, value: String?) {
     fun updateOptionInEntity(diff: WorkspaceEntityStorageDiffBuilder, entity: ModuleEntity) {
       if (key == Module.ELEMENT_TYPE) {
-        diff.modifyEntity(ModifiableModuleEntity::class.java, entity, { type = value })
+        diff.modifyEntity(ModifiableModuleEntity::class.java, entity) { type = value }
       }
       else {
         val customImlData = entity.customImlData

@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.buildtool
 
 import com.intellij.build.BuildProgressListener
@@ -15,7 +15,6 @@ import com.intellij.execution.ExecutionException
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.components.ServiceManager
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskType
 import com.intellij.openapi.progress.EmptyProgressIndicator
@@ -54,6 +53,8 @@ class MavenSyncConsole(private val myProject: Project) {
   private val JAVADOC_AND_SOURCE_CLASSIFIERS = setOf("javadoc", "sources", "test-javadoc", "test-sources")
   private val shownIssues = HashSet<String>()
 
+  private val myPostponed = ArrayList<() -> Unit>()
+
   private var myStartedSet = LinkedHashSet<Pair<Any, String>>()
 
   @Synchronized
@@ -90,10 +91,16 @@ class MavenSyncConsole(private val myProject: Project) {
 
     mySyncView.onEvent(mySyncId, StartBuildEventImpl(descriptor, SyncBundle.message("maven.sync.project.title", myProject.name)))
     debugLog("maven sync: started importing $myProject")
+
+    myPostponed.forEach(this::doIfImportInProcess)
+    myPostponed.clear();
   }
 
+  fun addText(@Nls text: String) = addText(text, true)
+
+
   @Synchronized
-  fun addText(@Nls text: String) = doIfImportInProcess {
+  fun addText(@Nls text: String, stdout: Boolean) = doIfImportInProcess {
     addText(mySyncId, text, true)
   }
 
@@ -110,8 +117,8 @@ class MavenSyncConsole(private val myProject: Project) {
   @Synchronized
   fun addWarning(@Nls text: String, @Nls description: String) = addWarning(text, description, null)
 
-  fun addBuildIssue(issue: BuildIssue, kind: MessageEvent.Kind) = doIfImportInProcess {
-    if (!newIssue(issue.title + issue.description)) return;
+  fun addBuildIssue(issue: BuildIssue, kind: MessageEvent.Kind) = doIfImportInProcessOrPostpone {
+    if (!newIssue(issue.title + issue.description)) return@doIfImportInProcessOrPostpone;
     mySyncView.onEvent(mySyncId, BuildIssueEventImpl(mySyncId, issue, kind))
     hasErrors = hasErrors || kind == MessageEvent.Kind.ERROR;
   }
@@ -158,7 +165,7 @@ class MavenSyncConsole(private val myProject: Project) {
   @Synchronized
   fun startWrapperResolving() {
     if (!started || finished) {
-      startImport(ServiceManager.getService(myProject, SyncViewManager::class.java))
+      startImport(myProject.getService(SyncViewManager::class.java))
     }
     startTask(mySyncId, SyncBundle.message("maven.sync.wrapper"))
   }
@@ -395,6 +402,15 @@ class MavenSyncConsole(private val myProject: Project) {
   private inline fun doIfImportInProcess(action: () -> Unit) {
     if (!started || finished) return
     action.invoke()
+  }
+
+  private fun doIfImportInProcessOrPostpone(action: () -> Unit) {
+    if (!started || finished) {
+      myPostponed.add(action)
+    }
+    else {
+      action.invoke()
+    }
   }
 
 

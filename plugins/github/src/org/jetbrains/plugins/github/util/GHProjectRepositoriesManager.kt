@@ -13,7 +13,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.util.EventDispatcher
 import com.intellij.util.concurrency.annotations.RequiresEdt
-import com.intellij.util.hosting.GitHostingUrlUtil
+import com.intellij.collaboration.hosting.GitHostingUrlUtil
 import com.intellij.util.ui.update.MergingUpdateQueue
 import com.intellij.util.ui.update.Update
 import git4idea.repo.GitRepository
@@ -77,7 +77,6 @@ class GHProjectRepositoriesManager(private val project: Project) : Disposable {
     val authenticatedServers = service<GithubAccountManager>().accounts.map { it.server }
     val servers = mutableListOf<GithubServerPath>().apply {
       add(GithubServerPath.DEFAULT_SERVER)
-      GithubAccountsMigrationHelper.getInstance().getOldServer()?.let { add(it) }
       addAll(authenticatedServers)
       addAll(serversFromDiscovery)
     }

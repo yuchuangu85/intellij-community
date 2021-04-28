@@ -8,8 +8,8 @@ import com.intellij.codeInsight.intention.impl.BaseIntentionAction;
 import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.dataFlow.NullabilityProblemKind.NullabilityProblem;
 import com.intellij.codeInspection.dataFlow.fix.*;
-import com.intellij.codeInspection.dataFlow.instructions.InstanceofInstruction;
-import com.intellij.codeInspection.dataFlow.instructions.Instruction;
+import com.intellij.codeInspection.dataFlow.lang.ir.inst.InstanceofInstruction;
+import com.intellij.codeInspection.dataFlow.lang.ir.inst.Instruction;
 import com.intellij.codeInspection.dataFlow.types.DfType;
 import com.intellij.codeInspection.dataFlow.types.DfTypes;
 import com.intellij.codeInspection.dataFlow.value.DfaValue;
@@ -91,7 +91,7 @@ public abstract class DataFlowInspectionBase extends AbstractBaseJavaLocalInspec
         if (aClass instanceof PsiTypeParameter) return;
         if (PsiUtil.isLocalOrAnonymousClass(aClass) && !(aClass instanceof PsiEnumConstantInitializer)) return;
 
-        final DataFlowRunner runner = new DataFlowRunner(holder.getProject(), aClass, ThreeState.fromBoolean(IGNORE_ASSERT_STATEMENTS));
+        var runner = new StandardDataFlowRunner(holder.getProject(), aClass, ThreeState.fromBoolean(IGNORE_ASSERT_STATEMENTS));
         DataFlowInstructionVisitor visitor =
           analyzeDfaWithNestedClosures(aClass, holder, runner, Collections.singletonList(runner.createMemoryState()));
         List<DfaMemoryState> states = visitor.getEndOfInitializerStates();
@@ -115,12 +115,11 @@ public abstract class DataFlowInspectionBase extends AbstractBaseJavaLocalInspec
       @Override
       public void visitMethod(PsiMethod method) {
         if (method.isConstructor()) return;
-        final DataFlowRunner runner = new DataFlowRunner(
-          holder.getProject(), method.getBody(), ThreeState.fromBoolean(IGNORE_ASSERT_STATEMENTS));
+        var runner = new StandardDataFlowRunner(holder.getProject(), method.getBody(), ThreeState.fromBoolean(IGNORE_ASSERT_STATEMENTS));
         analyzeMethod(method, runner, Collections.singletonList(runner.createMemoryState()));
       }
 
-      private void analyzeMethod(PsiMethod method, DataFlowRunner runner, List<DfaMemoryState> initialStates) {
+      private void analyzeMethod(PsiMethod method, StandardDataFlowRunner runner, List<DfaMemoryState> initialStates) {
         PsiCodeBlock scope = method.getBody();
         if (scope == null) return;
         PsiClass containingClass = PsiTreeUtil.getParentOfType(method, PsiClass.class);
@@ -198,7 +197,7 @@ public abstract class DataFlowInspectionBase extends AbstractBaseJavaLocalInspec
 
   private DataFlowInstructionVisitor analyzeDfaWithNestedClosures(PsiElement scope,
                                                                   ProblemsHolder holder,
-                                                                  DataFlowRunner dfaRunner,
+                                                                  StandardDataFlowRunner dfaRunner,
                                                                   Collection<? extends DfaMemoryState> initialStates) {
     final DataFlowInstructionVisitor visitor = new DataFlowInstructionVisitor(TREAT_UNKNOWN_MEMBERS_AS_NULLABLE);
     final RunnerResult rc = dfaRunner.analyzeMethod(scope, visitor, initialStates);
@@ -207,7 +206,7 @@ public abstract class DataFlowInspectionBase extends AbstractBaseJavaLocalInspec
           (ApplicationManager.getApplication().isUnitTestMode() || Registry.is("ide.dfa.report.imprecise"))) {
         reportAnalysisQualityProblem(holder, scope, "dataflow.not.precise");
       }
-      createDescription(dfaRunner, holder, visitor, scope);
+      createDescription(holder, visitor, scope, dfaRunner.getInstructions());
       dfaRunner.forNestedClosures((closure, states) -> analyzeDfaWithNestedClosures(closure, holder, dfaRunner, states));
     }
     else if (rc == RunnerResult.TOO_COMPLEX) {
@@ -262,10 +261,10 @@ public abstract class DataFlowInspectionBase extends AbstractBaseJavaLocalInspec
     return null;
   }
 
-  private void createDescription(DataFlowRunner runner,
-                                 ProblemsHolder holder,
+  private void createDescription(ProblemsHolder holder,
                                  final DataFlowInstructionVisitor visitor,
-                                 PsiElement scope) {
+                                 PsiElement scope, 
+                                 Instruction @NotNull [] instructions) {
     ProblemReporter reporter = new ProblemReporter(holder, scope);
 
     Map<PsiExpression, ConstantResult> constantExpressions = visitor.getConstantExpressions();
@@ -280,7 +279,7 @@ public abstract class DataFlowInspectionBase extends AbstractBaseJavaLocalInspec
 
     reportOptionalOfNullableImprovements(reporter, visitor.getOfNullableCalls());
 
-    reportRedundantInstanceOf(runner, visitor, reporter);
+    reportRedundantInstanceOf(visitor, reporter, instructions);
 
     reportConstants(reporter, visitor);
 
@@ -290,7 +289,7 @@ public abstract class DataFlowInspectionBase extends AbstractBaseJavaLocalInspec
 
     reportArrayStoreProblems(holder, visitor);
 
-    if (REPORT_NULLABLE_METHODS_RETURNING_NOT_NULL && visitor.isAlwaysReturnsNotNull(runner.getInstructions())) {
+    if (REPORT_NULLABLE_METHODS_RETURNING_NOT_NULL && visitor.isAlwaysReturnsNotNull(instructions)) {
       reportAlwaysReturnsNotNull(holder, scope);
     }
 
@@ -303,19 +302,20 @@ public abstract class DataFlowInspectionBase extends AbstractBaseJavaLocalInspec
     reportPointlessSameArguments(reporter, visitor);
   }
 
-  private static void reportRedundantInstanceOf(DataFlowRunner runner,
-                                                DataFlowInstructionVisitor visitor,
-                                                ProblemReporter reporter) {
-    for (Instruction instruction : runner.getInstructions()) {
+  private static void reportRedundantInstanceOf(DataFlowInstructionVisitor visitor,
+                                                ProblemReporter reporter,
+                                                Instruction @NotNull [] instructions) {
+    for (Instruction instruction : instructions) {
       if (instruction instanceof InstanceofInstruction) {
         InstanceofInstruction instanceOf = (InstanceofInstruction)instruction;
         if (visitor.isInstanceofRedundant(instanceOf)) {
           PsiExpression expression = instanceOf.getExpression();
-          if (expression != null && 
-              (!JavaPsiPatternUtil.getExposedPatternVariables(expression).isEmpty() || shouldBeSuppressed(expression))) continue;
+          if (expression == null || shouldBeSuppressed(expression)) continue;
+          if (JavaPsiPatternUtil.getExposedPatternVariables(expression).stream()
+            .anyMatch(var -> VariableAccessUtils.variableIsUsed(var, var.getDeclarationScope()))) continue;
           reporter.registerProblem(expression,
                                    JavaAnalysisBundle.message("dataflow.message.redundant.instanceof"),
-                                   new RedundantInstanceofFix());
+                                   new RedundantInstanceofFix(expression));
         }
       }
     }
@@ -362,7 +362,7 @@ public abstract class DataFlowInspectionBase extends AbstractBaseJavaLocalInspec
     }
     // Expression switch: if we cannot unwrap existing branch and the other one is default case, we cannot kill it either
     return (allBranches.size() <= 2 &&
-           !allBranches.stream().allMatch(branch -> branch == labelStatement || branch.isDefaultCase())) ||
+           !ContainerUtil.and(allBranches, branch -> branch == labelStatement || branch.isDefaultCase())) ||
            (labelStatement instanceof PsiSwitchLabeledRuleStatement &&
             ((PsiSwitchLabeledRuleStatement)labelStatement).getBody() instanceof PsiExpressionStatement);
   }
@@ -703,7 +703,7 @@ public abstract class DataFlowInspectionBase extends AbstractBaseJavaLocalInspec
   }
 
   private static @NotNull @InspectionMessage String getContractMessage(List<? extends MethodContract> contracts) {
-    if (contracts.stream().allMatch(mc -> mc.getConditions().stream().allMatch(ContractValue::isBoundCheckingCondition))) {
+    if (ContainerUtil.and(contracts, mc -> ContainerUtil.and(mc.getConditions(), ContractValue::isBoundCheckingCondition))) {
       return JavaAnalysisBundle.message("dataflow.message.contract.fail.index");
     }
     return JavaAnalysisBundle.message("dataflow.message.contract.fail");
@@ -878,9 +878,27 @@ public abstract class DataFlowInspectionBase extends AbstractBaseJavaLocalInspec
         }
       }
     }
+    if (expression instanceof PsiBinaryExpression) {
+      PsiExpression lOperand = ((PsiBinaryExpression)expression).getLOperand();
+      PsiExpression rOperand = ((PsiBinaryExpression)expression).getROperand();
+      IElementType tokenType = ((PsiBinaryExpression)expression).getOperationTokenType();
+      // Suppress on type mismatch compilation errors
+      if (rOperand == null) return true;
+      PsiType lType = lOperand.getType();
+      PsiType rType = rOperand.getType();
+      if (lType == null || rType == null) return true;
+      if (!TypeConversionUtil.isBinaryOperatorApplicable(tokenType, lType, rType, false)) return true;
+    }
     if (expression instanceof PsiInstanceOfExpression) {
       PsiType type = ((PsiInstanceOfExpression)expression).getOperand().getType();
       if (type == null || !TypeConstraints.instanceOf(type).isResolved()) return true;
+      PsiPattern pattern = ((PsiInstanceOfExpression)expression).getPattern();
+      if (pattern instanceof PsiTypeTestPattern && ((PsiTypeTestPattern)pattern).getPatternVariable() != null) {
+        if (((PsiTypeTestPattern)pattern).getCheckType().getType().isAssignableFrom(type)) {
+          // Reported as compilation error
+          return true;
+        }
+      }
     }
     PsiElement parent = PsiUtil.skipParenthesizedExprUp(expression.getParent());
     // Don't report "x" in "x == null" as will be anyways reported as "always true"

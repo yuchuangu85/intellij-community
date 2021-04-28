@@ -36,9 +36,11 @@ import com.intellij.openapi.util.registry.Registry;
 import com.intellij.ui.popup.NumericMnemonicItem;
 import com.intellij.ui.popup.WizardPopup;
 import com.intellij.ui.popup.list.ListPopupImpl;
+import com.intellij.ui.popup.list.PopupListElementRenderer;
 import com.intellij.ui.speedSearch.SpeedSearch;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
@@ -756,6 +758,21 @@ public final class ChooseRunConfigurationPopup implements ExecutorProvider {
         }
       }
       return false;
+    }
+
+    @Override
+    protected ListCellRenderer<?> getListElementRenderer() {
+      return new PopupListElementRenderer<>(this){
+        @Override
+        protected JComponent createIconBar() {
+          JPanel res = new JPanel(new BorderLayout());
+          res.setBorder(JBUI.Borders.emptyRight(JBUI.CurrentTheme.ActionsList.elementIconGap()));
+          res.add(myMnemonicLabel, BorderLayout.WEST);
+          res.add(myIconLabel, BorderLayout.CENTER);
+
+          return res;
+        }
+      };
     }
 
     @Override

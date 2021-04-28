@@ -1,17 +1,15 @@
 // Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.dataFlow;
 
-import com.intellij.codeInspection.dataFlow.instructions.AssignInstruction;
-import com.intellij.codeInspection.dataFlow.instructions.ConditionalGotoInstruction;
-import com.intellij.codeInspection.dataFlow.instructions.ExpressionPushingInstruction;
-import com.intellij.codeInspection.dataFlow.instructions.Instruction;
+import com.intellij.codeInspection.dataFlow.jvm.problems.JvmDfaProblem;
+import com.intellij.codeInspection.dataFlow.lang.UnsatisfiedConditionProblem;
+import com.intellij.codeInspection.dataFlow.lang.ir.inst.*;
 import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeBinOp;
 import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeSet;
 import com.intellij.codeInspection.dataFlow.types.*;
 import com.intellij.codeInspection.dataFlow.value.*;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
-import com.intellij.psi.PsiType;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
@@ -60,11 +58,11 @@ public class TrackingDfaMemoryState extends DfaMemoryStateImpl {
       }
       if (type instanceof DfAntiConstantType) {
         Set<?> notValues = ((DfAntiConstantType<?>)type).getNotValues();
-        PsiType varType = var.getType();
-        if (!notValues.isEmpty() && varType != null) {
+        if (!notValues.isEmpty()) {
+          DfType dfType = var.getDfType();
           for (Object notValue : notValues) {
             result.computeIfAbsent(var, k -> new HashSet<>()).add(
-              new Relation(RelationType.NE, getFactory().fromDfType(DfTypes.constant(notValue, varType))));
+              new Relation(RelationType.NE, getFactory().fromDfType(DfTypes.constant(notValue, dfType))));
           }
         }
       }
@@ -133,7 +131,7 @@ public class TrackingDfaMemoryState extends DfaMemoryStateImpl {
         removed.removeAll(newValueRelations);
         changeMap.compute(
           value, (v, change) -> change == null
-                                ? Change.create(removed, added, DfTypes.BOTTOM, DfTypes.BOTTOM)
+                                ? Change.create(removed, added, DfType.BOTTOM, DfType.BOTTOM)
                                 : Change.create(removed, added, change.myOldType, change.myNewType));
       }
     }
@@ -231,7 +229,7 @@ public class TrackingDfaMemoryState extends DfaMemoryStateImpl {
 
     @Nullable
     static Change create(Set<Relation> removedRelations, Set<Relation> addedRelations, DfType oldType, DfType newType) {
-      if (removedRelations.isEmpty() && addedRelations.isEmpty() && oldType == DfTypes.BOTTOM && newType == DfTypes.BOTTOM) {
+      if (removedRelations.isEmpty() && addedRelations.isEmpty() && oldType == DfType.BOTTOM && newType == DfType.BOTTOM) {
         return null;
       }
       return new Change(removedRelations, addedRelations, oldType, newType);
@@ -249,7 +247,7 @@ public class TrackingDfaMemoryState extends DfaMemoryStateImpl {
       DfType oldType = myOldType.join(other.myOldType);
       DfType newType = myNewType.join(other.myNewType);
       if (oldType.equals(newType)) {
-        oldType = newType = DfTypes.BOTTOM;
+        oldType = newType = DfType.BOTTOM;
       }
       return create(removed, added, oldType, newType);
     }
@@ -354,8 +352,8 @@ public class TrackingDfaMemoryState extends DfaMemoryStateImpl {
         FactDefinition<T> right = findFact(((DfaBinOpValue)value).getRight(), extractor);
         if (left.myFact instanceof LongRangeSet && right.myFact instanceof LongRangeSet) {
           LongRangeBinOp op = ((DfaBinOpValue)value).getOperation();
-          @SuppressWarnings("unchecked") 
-          T result = (T)op.eval((LongRangeSet)left.myFact, (LongRangeSet)right.myFact, PsiType.LONG.equals(value.getType()));
+          @SuppressWarnings("unchecked")
+          T result = (T)op.eval((LongRangeSet)left.myFact, (LongRangeSet)right.myFact, value.getDfType() instanceof DfLongType);
           return new FactDefinition<>(null, Objects.requireNonNull(result));
         }
       }
@@ -399,10 +397,16 @@ public class TrackingDfaMemoryState extends DfaMemoryStateImpl {
     PsiExpression getExpression() {
       if (myInstruction instanceof ExpressionPushingInstruction &&
           ((ExpressionPushingInstruction<?>)myInstruction).getExpressionRange() == null) {
-        return ((ExpressionPushingInstruction<?>)myInstruction).getExpression();
+        return (PsiExpression)((ExpressionPushingInstruction<?>)myInstruction).getExpression();
       }
       if (myInstruction instanceof ConditionalGotoInstruction) {
         return ObjectUtils.tryCast(((ConditionalGotoInstruction)myInstruction).getPsiAnchor(), PsiExpression.class);
+      }
+      if (myInstruction instanceof EnsureInstruction) {
+        UnsatisfiedConditionProblem problem = ((EnsureInstruction)myInstruction).getProblem();
+        if (problem instanceof JvmDfaProblem) {
+          return ObjectUtils.tryCast(((JvmDfaProblem)problem).getAnchor(), PsiExpression.class);
+        }
       }
       return null;
     }

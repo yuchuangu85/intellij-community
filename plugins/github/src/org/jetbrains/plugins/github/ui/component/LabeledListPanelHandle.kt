@@ -13,7 +13,7 @@ import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.JBUI.Panels.simplePanel
 import com.intellij.util.ui.UIUtil
 import com.intellij.util.ui.WrapLayout
-import com.intellij.util.ui.codereview.InlineIconButton
+import com.intellij.collaboration.ui.codereview.InlineIconButton
 import org.jetbrains.plugins.github.i18n.GithubBundle
 import org.jetbrains.plugins.github.pullrequest.ui.details.GHPRMetadataModel
 import org.jetbrains.plugins.github.util.CollectionDelta
@@ -27,6 +27,7 @@ import java.util.function.Function
 import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JPanel
+import kotlin.math.max
 import kotlin.properties.Delegates
 
 internal abstract class LabeledListPanelHandle<T>(protected val model: GHPRMetadataModel,
@@ -84,6 +85,10 @@ internal abstract class LabeledListPanelHandle<T>(protected val model: GHPRMetad
     }
     panel.validate()
     panel.repaint()
+  }
+
+  val preferredLabelWidth = label.getFontMetrics(label.font)?.let {
+    max(it.stringWidth(emptyText), it.stringWidth(notEmptyText))
   }
 
   init {

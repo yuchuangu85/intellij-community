@@ -7,6 +7,7 @@ import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.LookupElementPresentation;
 import com.intellij.codeInsight.lookup.LookupElementRenderer;
 import com.intellij.codeInsight.lookup.LookupFocusDegree;
+import com.intellij.openapi.application.AccessToken;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.editor.Editor;
@@ -68,8 +69,8 @@ public final class LookupCellRenderer implements ListCellRenderer<LookupElement>
 
   static final Color BACKGROUND_COLOR =
     new JBColor(() -> Objects.requireNonNullElse(EditorColorsUtil.getGlobalOrDefaultColor(COLOR_KEY),
-                                                 JBColor.namedColor("CompletionPopup.selectionForeground",
-                                                                    new JBColor(JBColor.WHITE, JBColor.foreground()))));
+                                                 JBColor.namedColor("CompletionPopup.background",
+                                                                    new JBColor(new Color(235, 244, 254), JBColor.background()))));
   private static final Color MATCHED_FOREGROUND_COLOR = JBColor.namedColor("CompletionPopup.matchForeground", JBUI.CurrentTheme.Link.Foreground.ENABLED);
   private static final Color SELECTED_BACKGROUND_COLOR = JBColor.namedColor("CompletionPopup.selectionBackground", new JBColor(0xc5dffc, 0x113a5c));
   public static final Color SELECTED_NON_FOCUSED_BACKGROUND_COLOR = JBColor.namedColor("CompletionPopup.selectionInactiveBackground", new JBColor(0xE0E0E0, 0x515457));
@@ -526,7 +527,9 @@ public final class LookupCellRenderer implements ListCellRenderer<LookupElement>
       if (myShrinkLookup || maxWidth > myLookupTextWidth) {
         myLookupTextWidth = maxWidth;
         myLookup.requestResize();
-        SlowOperations.allowSlowOperations(() -> myLookup.refreshUi(false, false));
+        try (AccessToken ignore = SlowOperations.allowSlowOperations(SlowOperations.RENDERING)) {
+          myLookup.refreshUi(false, false);
+        }
       }
     }
   }

@@ -38,9 +38,13 @@ import javax.swing.*;
 import java.awt.*;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
+import java.util.HashSet;
 import java.util.List;
-import java.util.*;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
+
+import static com.intellij.ide.impl.DataValidators.validOrNull;
 
 public class DataManagerImpl extends DataManager {
   private static final Logger LOG = Logger.getInstance(DataManagerImpl.class);
@@ -83,14 +87,14 @@ public class DataManagerImpl extends DataManager {
     try {
       depth[0]++;
       Object data = provider.getData(dataId);
-      if (data != null) return validated(data, dataId, provider);
+      if (data != null) return validOrNull(data, dataId, provider);
 
       if (dataRule != null) {
         final Set<String> ids = alreadyComputedIds == null ? new HashSet<>() : alreadyComputedIds;
         ids.add(dataId);
         data = dataRule.getData(id -> getDataFromProvider(provider, id, ids));
 
-        if (data != null) return validated(data, dataId, provider);
+        if (data != null) return validOrNull(data, dataId, provider);
       }
 
       return null;
@@ -121,21 +125,28 @@ public class DataManagerImpl extends DataManager {
   }
 
   public @Nullable GetDataRule getDataRule(@NotNull String dataId) {
-    String uninjectedId = AnActionEvent.uninjectedId(dataId);
+    String uninjectedId = InjectedDataKeys.uninjectedId(dataId);
     GetDataRule slowRule = dataProvider -> getSlowData(dataId, dataProvider);
-    List<GetDataRule> rules1 = myDataRuleCollector.forKey(dataId);
-    List<GetDataRule> rules2 = dataId.equals(uninjectedId) ? Collections.emptyList() : myDataRuleCollector.forKey(uninjectedId);
-    if (rules1.size() + rules2.size() == 0) return slowRule;
+    List<GetDataRule> rules1 = ContainerUtil.nullize(myDataRuleCollector.forKey(dataId));
+    List<GetDataRule> rules2 = uninjectedId == null ? null : ContainerUtil.nullize(myDataRuleCollector.forKey(uninjectedId));
+    if (rules1 == null && rules2 == null) return slowRule;
     return dataProvider -> {
       Object data = slowRule.getData(dataProvider);
       if (data != null) return data;
-      for (GetDataRule rule : rules1) {
-        data = rule.getData(dataProvider);
-        if (data != null) return data;
+      if (rules1 != null) {
+        for (GetDataRule rule : rules1) {
+          data = rule.getData(dataProvider);
+          if (data != null) return data;
+        }
       }
-      for (GetDataRule rule : rules2) {
-        data = rule.getData(id -> dataProvider.getData(AnActionEvent.injectedId(id)));
-        if (data != null) return data;
+      if (rules2 != null) {
+        for (GetDataRule rule : rules2) {
+          data = rule.getData(id -> {
+            String injectedId = InjectedDataKeys.injectedId(id);
+            return injectedId != null ? dataProvider.getData(injectedId) : null;
+          });
+          if (data != null) return data;
+        }
       }
       return null;
     };
@@ -151,18 +162,6 @@ public class DataManagerImpl extends DataManager {
       }
     }
     return null;
-  }
-
-  private static @Nullable Object validated(@NotNull Object data, @NotNull String dataId, @NotNull Object dataSource) {
-    Object invalidData = DataValidator.findInvalidData(dataId, data, dataSource);
-    if (invalidData != null) {
-      return null;
-      /*
-      LOG.assertTrue(false, "Data isn't valid. " + dataId + "=" + invalidData + " Provided by: " + dataSource.getClass().getName() + " (" +
-                            dataSource.toString() + ")");
-      */
-    }
-    return data;
   }
 
   @Override

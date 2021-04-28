@@ -6,6 +6,7 @@ import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.*;
@@ -25,6 +26,7 @@ import com.intellij.util.ThrowableConsumer;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.io.PreemptiveSafeFileOutputStream;
 import com.intellij.util.io.SafeFileOutputStream;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
@@ -34,11 +36,15 @@ import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * @author Dmitry Avdeev
  */
 public abstract class LocalFileSystemBase extends LocalFileSystem {
+  protected final ExtensionPointName<PluggableLocalFileSystemContentLoader> PLUGGABLE_CONTENT_LOADER_EP_NAME =
+    ExtensionPointName.create("com.intellij.vfs.local.pluggableContentLoader");
   protected static final Logger LOG = Logger.getInstance(LocalFileSystemBase.class);
 
   private final FileAttributes FAKE_ROOT_ATTRIBUTES =
@@ -62,7 +68,7 @@ public abstract class LocalFileSystemBase extends LocalFileSystem {
     return VfsImplUtil.refreshAndFindFileByPath(this, path);
   }
 
-  private static @NotNull String toIoPath(@NotNull VirtualFile file) {
+  protected static @NotNull String toIoPath(@NotNull VirtualFile file) {
     String path = file.getPath();
     if (StringUtil.endsWithChar(path, ':') && path.length() == 2 && SystemInfo.isWindows) {
       // makes 'C:' resolve to a root directory of the drive C:, not the current directory on that drive
@@ -80,7 +86,7 @@ public abstract class LocalFileSystemBase extends LocalFileSystem {
     return file.getFileSystem() == this ? Paths.get(toIoPath(file)) : null;
   }
 
-  private static @NotNull File convertToIOFileAndCheck(@NotNull VirtualFile file) throws FileNotFoundException {
+  protected static @NotNull File convertToIOFileAndCheck(@NotNull VirtualFile file) throws FileNotFoundException {
     File ioFile = convertToIOFile(file);
 
     if (SystemInfo.isUnix) { // avoid opening fifo files
@@ -181,6 +187,20 @@ public abstract class LocalFileSystemBase extends LocalFileSystem {
 
   @Override
   public void refreshIoFiles(@NotNull Iterable<? extends File> files, boolean async, boolean recursive, @Nullable Runnable onFinish) {
+    Stream<VirtualFile> iterator = StreamEx.of(files.iterator()).map(f -> refreshAndFindFileByIoFile(f));
+    refreshFiles(iterator, async, recursive, onFinish);
+  }
+
+  @Override
+  public void refreshNioFiles(@NotNull Iterable<? extends Path> files,
+                              boolean async,
+                              boolean recursive,
+                              @Nullable Runnable onFinish) {
+    Stream<VirtualFile> iterator = StreamEx.of(files.iterator()).map(f -> refreshAndFindFileByNioFile(f));
+    refreshFiles(iterator, async, recursive, onFinish);
+  }
+
+  private static void refreshFiles(@NotNull Stream<VirtualFile> files, boolean async, boolean recursive, @Nullable Runnable onFinish) {
     VirtualFileManagerEx manager = (VirtualFileManagerEx)VirtualFileManager.getInstance();
 
     Application app = ApplicationManager.getApplication();
@@ -188,22 +208,12 @@ public abstract class LocalFileSystemBase extends LocalFileSystem {
     if (fireCommonRefreshSession) manager.fireBeforeRefreshStart(false);
 
     try {
-      List<VirtualFile> filesToRefresh = new ArrayList<>();
-
-      for (File file : files) {
-        VirtualFile virtualFile = refreshAndFindFileByIoFile(file);
-        if (virtualFile != null) {
-          filesToRefresh.add(virtualFile);
-        }
-      }
-
-      RefreshQueue.getInstance().refresh(async, recursive, onFinish, filesToRefresh);
+      RefreshQueue.getInstance().refresh(async, recursive, onFinish, files.filter(f -> f != null).collect(Collectors.toList()));
     }
     finally {
       if (fireCommonRefreshSession) manager.fireAfterRefreshFinish(false);
     }
   }
-
 
   @Override
   public void refreshFiles(@NotNull Iterable<? extends VirtualFile> files, boolean async, boolean recursive, @Nullable Runnable onFinish) {
@@ -378,12 +388,30 @@ public abstract class LocalFileSystemBase extends LocalFileSystem {
 
   @Override
   public @NotNull InputStream getInputStream(@NotNull VirtualFile file) throws IOException {
-    return new BufferedInputStream(new FileInputStream(convertToIOFileAndCheck(file)));
+    File ioFile = convertToIOFileAndCheck(file);
+
+    for (PluggableLocalFileSystemContentLoader loader : PLUGGABLE_CONTENT_LOADER_EP_NAME.getExtensionList()) {
+      InputStream is = loader.getInputStream(ioFile);
+      if (is != null) {
+        return is;
+      }
+    }
+
+    return new BufferedInputStream(new FileInputStream(ioFile));
   }
 
   @Override
   public byte @NotNull [] contentsToByteArray(@NotNull VirtualFile file) throws IOException {
-    try (InputStream stream = new FileInputStream(convertToIOFileAndCheck(file))) {
+    File ioFile = convertToIOFileAndCheck(file);
+
+    for (PluggableLocalFileSystemContentLoader loader : PLUGGABLE_CONTENT_LOADER_EP_NAME.getExtensionList()) {
+      byte[] bytes = loader.contentToByteArray(ioFile);
+      if (bytes != null) {
+        return bytes;
+      }
+    }
+
+    try (InputStream stream = new FileInputStream(ioFile)) {
       long l = file.getLength();
       if (l >= FileUtilRt.LARGE_FOR_CONTENT_LOADING) throw new FileTooBigException(file.getPath());
       int length = (int)l;

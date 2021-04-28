@@ -106,7 +106,8 @@ internal fun assertDirectoryMatches(actualDir: File, expectedDir: File, filesToI
 internal fun createProjectSerializers(projectDir: File, virtualFileManager: VirtualFileUrlManager): JpsProjectSerializersImpl {
   val reader = CachingJpsFileContentReader(VfsUtilCore.pathToUrl(projectDir.systemIndependentPath))
   val externalStoragePath = projectDir.toPath().resolve("cache")
-  return JpsProjectEntitiesLoader.createProjectSerializers(toConfigLocation(projectDir.toPath(), virtualFileManager), reader, externalStoragePath, true, virtualFileManager) as JpsProjectSerializersImpl
+  return JpsProjectEntitiesLoader.createProjectSerializers(toConfigLocation(projectDir.toPath(), virtualFileManager), reader,
+                                                           externalStoragePath, true, virtualFileManager) as JpsProjectSerializersImpl
 }
 
 fun JpsProjectSerializersImpl.checkConsistency(projectBaseDirUrl: String, storage: WorkspaceEntityStorage, virtualFileManager: VirtualFileUrlManager) {
@@ -207,7 +208,7 @@ internal class JpsFileContentWriterImpl(private val baseProjectDir: File) : JpsF
         }
         components.entries.sortedBy { it.key }.forEach { (name, element) ->
           if (element != null && !isEmptyComponentTag(element)) {
-            if (name == "DeprecatedModuleOptionManager") {
+            if (name == DEPRECATED_MODULE_MANAGER_COMPONENT_NAME) {
               element.getChildren("option").forEach {
                 newRootElement.setAttribute(it.getAttributeValue("key")!!, it.getAttributeValue("value")!!)
               }

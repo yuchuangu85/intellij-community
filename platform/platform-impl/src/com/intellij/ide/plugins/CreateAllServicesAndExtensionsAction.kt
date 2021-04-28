@@ -1,4 +1,4 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.plugins
 
 import com.intellij.diagnostic.PluginException
@@ -27,7 +27,7 @@ import java.util.function.BiConsumer
 import kotlin.properties.Delegates.notNull
 
 @Suppress("HardCodedStringLiteral")
-private class CreateAllServicesAndExtensionsAction : AnAction("Create All Services And Extensions"), DumbAware {
+class CreateAllServicesAndExtensionsAction : AnAction("Create All Services And Extensions"), DumbAware {
   companion object {
     @JvmStatic
     fun createAllServicesAndExtensions() {
@@ -104,7 +104,7 @@ private fun checkExtensionPoint(extensionPoint: ExtensionPointImpl<*>, taskExecu
 
     taskExecutor {
       try {
-        val extension = supplier.get()
+        val extension = supplier.get() ?: return@taskExecutor
         if (!extensionClass.isInstance(extension)) {
           throw PluginException("Extension ${extension.javaClass.name} does not implement $extensionClass",
                                 pluginDescriptor.pluginId)
@@ -123,7 +123,7 @@ private fun checkExtensionPoint(extensionPoint: ExtensionPointImpl<*>, taskExecu
 private fun checkLightServices(taskExecutor: (task: () -> Unit) -> Unit) {
   for (plugin in PluginManagerCore.getLoadedPlugins(null)) {
     // we don't check classloader for sub descriptors because url set is the same
-    if (plugin.classLoader !is PluginClassLoader || plugin.pluginDependencies == null) {
+    if (plugin.classLoader !is PluginClassLoader || plugin.getPluginDependencies().isEmpty()) {
       continue
     }
 
@@ -168,7 +168,7 @@ private fun checkLightServices(taskExecutor: (task: () -> Unit) -> Unit) {
 
 private fun loadLightServiceClass(lightService: ClassInfo, mainDescriptor: IdeaPluginDescriptorImpl): Class<*> {
   //
-  for (pluginDependency in mainDescriptor.pluginDependencies!!) {
+  for (pluginDependency in mainDescriptor.getPluginDependencies()) {
     val subPluginClassLoader = pluginDependency.subDescriptor?.classLoader as? PluginClassLoader ?: continue
     val packagePrefix = subPluginClassLoader.packagePrefix ?: continue
     if (lightService.name.startsWith(packagePrefix)) {
@@ -176,7 +176,7 @@ private fun loadLightServiceClass(lightService: ClassInfo, mainDescriptor: IdeaP
     }
   }
 
-  for (pluginDependency in mainDescriptor.pluginDependencies!!) {
+  for (pluginDependency in mainDescriptor.getPluginDependencies()) {
     val subPluginClassLoader = pluginDependency.subDescriptor?.classLoader as? PluginClassLoader ?: continue
     val clazz = subPluginClassLoader.loadClass(lightService.name, true)
     if (clazz != null && clazz.classLoader === subPluginClassLoader) {

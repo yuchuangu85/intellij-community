@@ -5,6 +5,11 @@ import com.intellij.codeInsight.daemon.impl.analysis.HighlightControlFlowUtil;
 import com.intellij.codeInspection.AbstractBaseJavaLocalInspectionTool;
 import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.codeInspection.dataFlow.*;
+import com.intellij.codeInspection.dataFlow.java.JavaDfaInstructionVisitor;
+import com.intellij.codeInspection.dataFlow.lang.DfaInterceptor;
+import com.intellij.codeInspection.dataFlow.lang.ir.ControlFlow;
+import com.intellij.codeInspection.dataFlow.lang.ir.inst.CheckNotNullInstruction;
+import com.intellij.codeInspection.dataFlow.lang.ir.inst.Instruction;
 import com.intellij.codeInspection.dataFlow.types.DfReferenceType;
 import com.intellij.codeInspection.dataFlow.types.DfType;
 import com.intellij.codeInspection.dataFlow.value.DfaValue;
@@ -131,7 +136,25 @@ public class ConditionCoveredByFurtherConditionInspection extends AbstractBaseJa
 
   @NotNull
   private static Map<PsiExpression, ThreeState> computeOperandValues(PsiPolyadicExpression expressionToAnalyze) {
-    DataFlowRunner runner = new DataFlowRunner(expressionToAnalyze.getProject(), expressionToAnalyze) {
+    StandardDataFlowRunner runner = new StandardDataFlowRunner(expressionToAnalyze.getProject(), expressionToAnalyze) {
+      @Override
+      protected DfaInstructionState @NotNull [] acceptInstruction(@NotNull InstructionVisitor<?> visitor,
+                                                                  @NotNull DfaInstructionState instructionState) {
+        Instruction instruction = instructionState.getInstruction();
+        if (instruction instanceof CheckNotNullInstruction) {
+          DfaMemoryState state = instructionState.getMemoryState();
+          DfaValue value = state.peek();
+          if (value instanceof DfaVariableValue) {
+            DfType dfType = state.getDfType(value);
+            if (dfType instanceof DfReferenceType) {
+              state.setDfType(value, ((DfReferenceType)dfType).dropNullability().meet(DfaNullability.NULLABLE.asDfType()));
+              return new DfaInstructionState[]{new DfaInstructionState(getInstruction(instruction.getIndex() + 1), state)};
+            }
+          }
+        }
+        return super.acceptInstruction(visitor, instructionState);
+      }
+
       @NotNull
       @Override
       protected List<DfaInstructionState> createInitialInstructionStates(@NotNull PsiElement psiBlock,
@@ -164,26 +187,12 @@ public class ConditionCoveredByFurtherConditionInspection extends AbstractBaseJa
       }
     };
     Map<PsiExpression, ThreeState> values = new HashMap<>();
-    StandardInstructionVisitor visitor = new StandardInstructionVisitor() {
+    RunnerResult result = runner.analyzeMethod(expressionToAnalyze, new JavaDfaInstructionVisitor(new DfaInterceptor<>() {
       @Override
-      protected ThreeState checkNotNullable(DfaMemoryState state,
-                                         @NotNull DfaValue value,
-                                         @Nullable NullabilityProblemKind.NullabilityProblem<?> problem) {
-        if (value instanceof DfaVariableValue) {
-          DfType dfType = state.getDfType(value);
-          if (dfType instanceof DfReferenceType) {
-            state.setDfType(value, ((DfReferenceType)dfType).dropNullability().meet(DfaNullability.NULLABLE.asDfType()));
-          }
-        }
-        return ThreeState.YES;
-      }
-
-      @Override
-      protected void beforeExpressionPush(@NotNull DfaValue value,
-                                          @NotNull PsiExpression expression,
-                                          @Nullable TextRange range,
-                                          @NotNull DfaMemoryState state) {
-        super.beforeExpressionPush(value, expression, range, state);
+      public void beforeExpressionPush(@NotNull DfaValue value,
+                                       @NotNull PsiExpression expression,
+                                       @Nullable TextRange range,
+                                       @NotNull DfaMemoryState state) {
         if (PsiUtil.skipParenthesizedExprUp(expression.getParent()) != expressionToAnalyze) return;
         ThreeState old = values.get(expression);
         if (old == ThreeState.UNSURE) return;
@@ -194,8 +203,7 @@ public class ConditionCoveredByFurtherConditionInspection extends AbstractBaseJa
         }
         values.put(expression, old == null || old == result ? result : ThreeState.UNSURE);
       }
-    };
-    RunnerResult result = runner.analyzeMethod(expressionToAnalyze, visitor);
+    }));
     return result == RunnerResult.OK ? values : Collections.emptyMap();
   }
 }

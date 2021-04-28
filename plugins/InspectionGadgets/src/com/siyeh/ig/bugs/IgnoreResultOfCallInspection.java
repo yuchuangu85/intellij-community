@@ -1,18 +1,4 @@
-/*
- * Copyright 2003-2021 Dave Griffith, Bas Leijdekkers
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.siyeh.ig.bugs;
 
 import com.intellij.codeInsight.AnnotationUtil;
@@ -22,6 +8,7 @@ import com.intellij.codeInspection.dataFlow.JavaMethodContractUtil;
 import com.intellij.codeInspection.dataFlow.MethodContract;
 import com.intellij.codeInspection.ui.ListTable;
 import com.intellij.codeInspection.ui.ListWrappingTableModel;
+import com.intellij.codeInspection.ui.MultipleCheckboxOptionsPanel;
 import com.intellij.java.JavaBundle;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.util.InvalidDataException;
@@ -47,7 +34,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import java.awt.*;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -65,10 +51,10 @@ public class IgnoreResultOfCallInspection extends BaseInspection {
       CallMatcher.staticCall(CommonClassNames.JAVA_LANG_LONG, "parseLong", "valueOf"),
       CallMatcher.staticCall(CommonClassNames.JAVA_LANG_DOUBLE, "parseDouble", "valueOf"),
       CallMatcher.staticCall(CommonClassNames.JAVA_LANG_FLOAT, "parseFloat", "valueOf")), "java.lang.NumberFormatException")
-    .register(CallMatcher.instanceCall(CommonClassNames.JAVA_LANG_CLASS, 
-                                       "getMethod", "getDeclaredMethod", "getConstructor", "getDeclaredConstructor"), 
+    .register(CallMatcher.instanceCall(CommonClassNames.JAVA_LANG_CLASS,
+                                       "getMethod", "getDeclaredMethod", "getConstructor", "getDeclaredConstructor"),
               "java.lang.NoSuchMethodException")
-    .register(CallMatcher.instanceCall(CommonClassNames.JAVA_LANG_CLASS, 
+    .register(CallMatcher.instanceCall(CommonClassNames.JAVA_LANG_CLASS,
                                        "getField", "getDeclaredField"), "java.lang.NoSuchFieldException");
   private static final CallMatcher MOCK_LIBS_EXCLUDED_QUALIFIER_CALLS =
     CallMatcher.anyOf(
@@ -116,6 +102,7 @@ public class IgnoreResultOfCallInspection extends BaseInspection {
       .add("java.util.Map", "of|ofEntries|entry")
       .add("java.util.Set", "of")
       .add("java.util.UUID",".*")
+      .add("java.util.concurrent.BlockingQueue", "offer|remove")
       .add("java.util.concurrent.CountDownLatch","await|getCount")
       .add("java.util.concurrent.ExecutorService","awaitTermination|isShutdown|isTerminated")
       .add("java.util.concurrent.ForkJoinPool","awaitQuiescence")
@@ -134,16 +121,14 @@ public class IgnoreResultOfCallInspection extends BaseInspection {
 
   @Override
   public JComponent createOptionsPanel() {
-    final JPanel panel = new JPanel(new BorderLayout());
+    final MultipleCheckboxOptionsPanel panel = new MultipleCheckboxOptionsPanel(this);
     final ListTable table = new ListTable(new ListWrappingTableModel(
       Arrays.asList(myMethodMatcher.getClassNames(), myMethodMatcher.getMethodNamePatterns()),
       InspectionGadgetsBundle.message("result.of.method.call.ignored.class.column.title"),
       InspectionGadgetsBundle.message("result.of.method.call.ignored.method.column.title")));
     final JPanel tablePanel = UiUtils.createAddRemoveTreeClassChooserPanel(table, JavaBundle.message("dialog.title.choose.class"));
-    final CheckBox checkBox =
-      new CheckBox(InspectionGadgetsBundle.message("result.of.method.call.ignored.non.library.option"), this, "m_reportAllNonLibraryCalls");
-    panel.add(tablePanel, BorderLayout.CENTER);
-    panel.add(checkBox, BorderLayout.SOUTH);
+    panel.addGrowing(tablePanel);
+    panel.addCheckbox(InspectionGadgetsBundle.message("result.of.method.call.ignored.non.library.option"), "m_reportAllNonLibraryCalls");
     return panel;
   }
 

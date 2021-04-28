@@ -25,7 +25,6 @@ import com.intellij.ui.ClickListener
 import com.intellij.ui.ComponentUtil
 import com.intellij.ui.LayeredIcon
 import com.intellij.ui.SimpleTextAttributes
-import com.intellij.util.EventDispatcher
 import com.intellij.util.FontUtil
 import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.containers.JBIterable
@@ -72,7 +71,6 @@ abstract class GitStageTree(project: Project, private val settings: GitStageUiSe
   init {
     isKeepTreeState = true
     isScrollToSelection = false
-    isShowCheckboxes = true
     setCellRenderer(GitStageTreeRenderer(myProject) { isShowFlatten })
     MyMouseListener().also {
       addMouseMotionListener(it)
@@ -86,6 +84,8 @@ abstract class GitStageTree(project: Project, private val settings: GitStageUiSe
       }
     }, parentDisposable)
   }
+
+  override fun getToggleClickCount(): Int = 2
 
   abstract fun performStageOperation(nodes: List<GitFileStatusNode>, operation: StagingAreaOperation)
 

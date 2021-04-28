@@ -2,6 +2,7 @@
 package org.intellij.plugins.markdown.ui.preview.jcef
 
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.util.registry.Registry
 import com.intellij.ui.jcef.JCEFHtmlPanel
 import org.intellij.markdown.html.HtmlGenerator
 import org.intellij.plugins.markdown.extensions.MarkdownConfigurableExtension
@@ -11,7 +12,7 @@ import org.intellij.plugins.markdown.ui.preview.PreviewStaticServer
 import org.intellij.plugins.markdown.ui.preview.ResourceProvider
 import kotlin.random.Random
 
-class MarkdownJCEFHtmlPanel : JCEFHtmlPanel(getClassUrl()), MarkdownHtmlPanel {
+class MarkdownJCEFHtmlPanel : JCEFHtmlPanel(isOffScreenRendering(), null, getClassUrl()), MarkdownHtmlPanel {
   private val resourceProvider = MyResourceProvider()
   private val browserPipe = BrowserPipe(this)
 
@@ -196,5 +197,7 @@ class MarkdownJCEFHtmlPanel : JCEFHtmlPanel(getClassUrl()), MarkdownHtmlPanel {
       }
       return "$url@${Random.nextInt(Integer.MAX_VALUE)}"
     }
+
+    private fun isOffScreenRendering(): Boolean = Registry.`is`("ide.browser.jcef.markdownView.osr.enabled")
   }
 }

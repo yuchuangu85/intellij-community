@@ -8,9 +8,11 @@ import com.intellij.java.analysis.JavaAnalysisBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.NlsSafe;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.psi.CommonClassNames;
 import com.intellij.psi.PsiIntersectionType;
 import com.intellij.psi.PsiType;
 import com.intellij.util.ObjectUtils;
+import com.intellij.util.containers.ContainerUtil;
 import one.util.streamex.EntryStream;
 import one.util.streamex.MoreCollectors;
 import one.util.streamex.StreamEx;
@@ -87,6 +89,20 @@ public interface TypeConstraint {
   }
 
   /**
+   * @param className fully-qualified class name to check
+   * @return true if this constraint represents a class with a given class name
+   */
+  default boolean isExact(@NotNull String className) {
+    return false;
+  }
+
+  /**
+   * @param className fully-qualified class name to check
+   * @return true if all types that satisfy this constraint are subtypes of a given class name
+   */
+  boolean isSubtypeOf(@NotNull String className);
+
+  /**
    * @return true if the types represented by this constraint are known to be compared by .equals() within DFA algorithm
    */
   default boolean isComparedByEquals() {
@@ -131,8 +147,8 @@ public interface TypeConstraint {
    * @return a {@link DfType} that represents any object that satisfies this constraint, or null (nullability is unknown)
    */
   default DfType asDfType() {
-    return this == TypeConstraints.BOTTOM ? DfTypes.BOTTOM :
-           DfTypes.customObject(this, DfaNullability.UNKNOWN, Mutability.UNKNOWN, null, DfTypes.BOTTOM);
+    return this == TypeConstraints.BOTTOM ? DfType.BOTTOM :
+           DfTypes.customObject(this, DfaNullability.UNKNOWN, Mutability.UNKNOWN, null, DfType.BOTTOM);
   }
 
   /**
@@ -143,10 +159,33 @@ public interface TypeConstraint {
   }
 
   /**
-   * @return an array component type for an array type; BOTTOM if this type is not always an array type or primitive array
+   * @return an array component type for an array type; BOTTOM if this type is not always an array type
    */
-  default @NotNull TypeConstraint getArrayComponent() {
-    return TypeConstraints.BOTTOM;
+  default @NotNull DfType getArrayComponentType() {
+    return DfType.BOTTOM;
+  }
+
+  /**
+   * @return true if this constraint always represents an array type
+   */
+  default boolean isArray() {
+    return false;
+  }
+
+  /**
+   * @return type that represents unboxed type of this type;
+   * {@link DfType#TOP} if this constraint can be one of several primitive wrappers
+   * {@link DfType#BOTTOM} if this constraint is not primitive wrapper
+   */
+  default DfType getUnboxedType() {
+    return DfType.BOTTOM;
+  }
+
+  /**
+   * @return true if this type always represents a primitive wrapper
+   */
+  default boolean isPrimitiveWrapper() {
+    return false;
   }
 
   /**
@@ -155,7 +194,7 @@ public interface TypeConstraint {
    */
   static @NotNull TypeConstraint fromDfType(DfType type) {
     return type instanceof DfReferenceType ? ((DfReferenceType)type).getConstraint() :
-           type == DfTypes.BOTTOM ? TypeConstraints.BOTTOM :
+           type == DfType.BOTTOM ? TypeConstraints.BOTTOM :
            TypeConstraints.TOP;
   }
 
@@ -185,6 +224,16 @@ public interface TypeConstraint {
     @Override
     default boolean isExact() {
       return true;
+    }
+
+    @Override
+    default boolean isExact(@NotNull String className) {
+      return className.equals(toString());
+    }
+
+    @Override
+    default boolean isSubtypeOf(@NotNull String className) {
+      return isExact(className) || superTypes().anyMatch(st -> st.isExact(className));
     }
 
     /**
@@ -275,6 +324,12 @@ public interface TypeConstraint {
    * A non-exact, constrained type
    */
   final class Constrained implements TypeConstraint {
+    private static final Set<String> WRAPPER_SUPER_TYPES = Set.of(CommonClassNames.JAVA_LANG_OBJECT,
+                                                                  CommonClassNames.JAVA_LANG_NUMBER,
+                                                                  CommonClassNames.JAVA_IO_SERIALIZABLE,
+                                                                  CommonClassNames.JAVA_LANG_COMPARABLE,
+                                                                  "java.lang.constant.Constable",
+                                                                  "java.lang.constant.ConstantDesc");
     private final @NotNull Set<Exact> myInstanceOf;
     private final @NotNull Set<Exact> myNotInstanceOf;
 
@@ -286,7 +341,7 @@ public interface TypeConstraint {
 
     @Override
     public boolean isResolved() {
-      return myInstanceOf.stream().allMatch(Exact::isResolved);
+      return ContainerUtil.and(myInstanceOf, Exact::isResolved);
     }
 
     @Override
@@ -504,10 +559,19 @@ public interface TypeConstraint {
     }
 
     @Override
-    public @NotNull TypeConstraint getArrayComponent() {
-      return instanceOfTypes().map(Exact::getArrayComponent)
-        .map(type -> type instanceof Exact ? ((Exact)type).instanceOf() : TypeConstraints.BOTTOM)
-        .reduce(TypeConstraint::meet).orElse(TypeConstraints.BOTTOM);
+    public @NotNull DfType getArrayComponentType() {
+      return instanceOfTypes().map(Exact::getArrayComponentType)
+        .reduce(DfType::meet).orElse(DfType.BOTTOM);
+    }
+
+    @Override
+    public DfType getUnboxedType() {
+      return instanceOfTypes().allMatch(t -> WRAPPER_SUPER_TYPES.contains(t.toString())) ? DfType.TOP : DfType.BOTTOM;
+    }
+
+    @Override
+    public boolean isArray() {
+      return instanceOfTypes().anyMatch(Exact::isArray);
     }
 
     @Override
@@ -547,6 +611,11 @@ public interface TypeConstraint {
         .removeValues(Set::isEmpty)
         .mapKeyValue((prefix, set) -> StreamEx.of(set).map(Exact::toShortString).sorted().joining(", ", prefix, ""))
         .joining("\n");
+    }
+
+    @Override
+    public boolean isSubtypeOf(@NotNull String className) {
+      return instanceOfTypes().anyMatch(ex -> ex.isSubtypeOf(className));
     }
   }
 }

@@ -1759,7 +1759,10 @@ final class EditorGutterComponentImpl extends EditorGutterComponentEx implements
       TooltipRenderer tr =
         ((EditorMarkupModel)myEditor.getMarkupModel()).getErrorStripTooltipRendererProvider().calcTooltipRenderer(toolTip);
       HintHint hint =
-        new HintHint(this, location).setAwtTooltip(true).setPreferredPosition(relativePosition).setRequestFocus(ScreenReader.isActive());
+        new HintHint(this, location)
+          .setAwtTooltip(true)
+          .setPreferredPosition(relativePosition)
+          .setRequestFocus(ScreenReader.isActive());
       if (myEditor.getComponent().getRootPane() != null) {
         controller.showTooltipByMouseMove(myEditor, showPoint, tr, false, GUTTER_TOOLTIP_GROUP, hint);
       }
@@ -1944,8 +1947,7 @@ final class EditorGutterComponentImpl extends EditorGutterComponentEx implements
     }
 
     AnActionEvent actionEvent = AnActionEvent.createFromAnAction(action, e, place, context);
-    action.update(actionEvent);
-    if (actionEvent.getPresentation().isEnabledAndVisible()) {
+    if (ActionUtil.lastUpdateAndCheckDumb(action, actionEvent, true)) {
       ActionUtil.performActionDumbAwareWithCallbacks(action, actionEvent);
     }
   }
@@ -2132,32 +2134,32 @@ final class EditorGutterComponentImpl extends EditorGutterComponentEx implements
         }
       }
       if (!addActions.isEmpty()) {
+        e.consume();
         DefaultActionGroup actionGroup = DefaultActionGroup.createPopupGroup(EditorBundle.messagePointer("editor.annotations.action.group.name"));
         for (AnAction addAction : addActions) {
           actionGroup.add(addAction);
         }
         JPopupMenu menu = actionManager.createActionPopupMenu("", actionGroup).getComponent();
         menu.show(this, e.getX(), e.getY());
-        e.consume();
       }
     }
     else {
       if (info != null) {
         AnAction rightButtonAction = info.renderer.getRightButtonClickAction();
         if (rightButtonAction != null) {
-          performAction(rightButtonAction, e, ActionPlaces.EDITOR_GUTTER_POPUP, myEditor.getDataContext());
           e.consume();
+          performAction(rightButtonAction, e, ActionPlaces.EDITOR_GUTTER_POPUP, myEditor.getDataContext());
         }
         else {
           ActionGroup actionGroup = info.renderer.getPopupMenuActions();
           if (actionGroup != null) {
+            e.consume();
             if (checkDumbAware(actionGroup)) {
               actionManager.createActionPopupMenu(ActionPlaces.EDITOR_GUTTER_POPUP, actionGroup).getComponent().show(this, e.getX(), e.getY());
             }
             else {
               notifyNotDumbAware();
             }
-            e.consume();
           }
         }
       }
@@ -2167,10 +2169,10 @@ final class EditorGutterComponentImpl extends EditorGutterComponentEx implements
           group = (ActionGroup)CustomActionsSchema.getInstance().getCorrectedAction(IdeActions.GROUP_EDITOR_GUTTER);
         }
         if (group != null) {
+          e.consume();
           ActionPopupMenu popupMenu = actionManager.createActionPopupMenu(ActionPlaces.EDITOR_GUTTER_POPUP, group);
           popupMenu.getComponent().show(this, e.getX(), e.getY());
         }
-        e.consume();
       }
     }
   }

@@ -4,6 +4,7 @@ package com.siyeh.ig.psiutils;
 import com.intellij.codeInsight.Nullability;
 import com.intellij.codeInspection.dataFlow.*;
 import com.intellij.codeInspection.dataFlow.ContractReturnValue.BooleanReturnValue;
+import com.intellij.codeInspection.dataFlow.java.DfaExpressionFactory;
 import com.intellij.codeInspection.dataFlow.value.*;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
@@ -306,12 +307,12 @@ public final class ReorderingUtils {
       }
       if (condition instanceof PsiBinaryExpression) {
         PsiBinaryExpression binOp = (PsiBinaryExpression)condition;
-        RelationType relationType = RelationType.fromElementType(binOp.getOperationTokenType());
+        RelationType relationType = DfaPsiUtil.getRelationByToken(binOp.getOperationTokenType());
         if (relationType != null) {
           PsiExpression left = binOp.getLOperand();
           PsiExpression right = binOp.getROperand();
-          DfaValue leftVal = myFactory.createValue(left);
-          DfaValue rightVal = myFactory.createValue(right);
+          DfaValue leftVal = DfaExpressionFactory.getExpressionDfaValue(myFactory, left);
+          DfaValue rightVal = DfaExpressionFactory.getExpressionDfaValue(myFactory, right);
           if (leftVal == null || rightVal == null) return false;
           DfaCondition value1 = leftVal.cond(relationType, rightVal);
           DfaCondition value2 = rightVal.cond(Objects.requireNonNull(relationType.getFlipped()), leftVal);
@@ -430,8 +431,8 @@ public final class ReorderingUtils {
         return false;
       }
       if (element instanceof PsiSwitchExpression) {
-        // We cannot correctly process possible NPE in switch selector expression inside 
-        // ConditionCoveredByFurtherConditionInspection.computeOperandValues, 
+        // We cannot correctly process possible NPE in switch selector expression inside
+        // ConditionCoveredByFurtherConditionInspection.computeOperandValues,
         // so let's conservatively assume that the exception is possible
         return false;
       }

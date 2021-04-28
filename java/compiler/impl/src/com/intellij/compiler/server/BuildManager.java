@@ -19,17 +19,22 @@ import com.intellij.execution.ExecutionManager;
 import com.intellij.execution.process.*;
 import com.intellij.execution.runners.ExecutionEnvironment;
 import com.intellij.execution.wsl.WSLDistribution;
+import com.intellij.execution.wsl.WslDistributionManager;
 import com.intellij.execution.wsl.WslPath;
 import com.intellij.ide.IdeEventQueue;
 import com.intellij.ide.PowerSaveMode;
 import com.intellij.ide.actions.RevealFileAction;
 import com.intellij.ide.file.BatchFileChangeListener;
+import com.intellij.ide.impl.TrustedProjects;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.AnActionEvent;
-import com.intellij.openapi.application.*;
+import com.intellij.openapi.application.Application;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.PathManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.compiler.*;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
@@ -59,7 +64,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.newvfs.BulkFileListener;
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
-import com.intellij.openapi.vfs.newvfs.impl.FileNameCache;
 import com.intellij.openapi.wm.IdeFrame;
 import com.intellij.serviceContainer.AlreadyDisposedException;
 import com.intellij.ui.ComponentUtil;
@@ -71,6 +75,7 @@ import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.concurrency.SequentialTaskExecutor;
 import com.intellij.util.containers.CollectionFactory;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.SLRUCache;
 import com.intellij.util.io.BaseOutputReader;
 import com.intellij.util.io.storage.HeavyProcessLatch;
 import com.intellij.util.lang.JavaVersion;
@@ -85,8 +90,6 @@ import io.netty.handler.codec.protobuf.ProtobufEncoder;
 import io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder;
 import io.netty.handler.codec.protobuf.ProtobufVarint32LengthFieldPrepender;
 import io.netty.util.internal.ThreadLocalRandom;
-import it.unimi.dsi.fastutil.ints.IntArrayList;
-import it.unimi.dsi.fastutil.ints.IntList;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -98,6 +101,7 @@ import org.jetbrains.jps.cmdline.BuildMain;
 import org.jetbrains.jps.cmdline.ClasspathBootstrap;
 import org.jetbrains.jps.incremental.Utils;
 import org.jetbrains.jps.incremental.storage.ProjectStamps;
+import org.jetbrains.jps.javac.Iterators;
 import org.jetbrains.jps.model.java.compiler.JavaCompilers;
 
 import javax.tools.JavaCompiler;
@@ -121,9 +125,6 @@ import java.util.stream.Collectors;
 
 import static org.jetbrains.jps.api.CmdlineRemoteProto.Message.ControllerMessage.ParametersMessage.TargetTypeBuildScope;
 
-/**
- * @author Eugene Zhuravlev
- */
 public final class BuildManager implements Disposable {
   public static final Key<Boolean> ALLOW_AUTOMAKE = Key.create("_allow_automake_when_process_is_active_");
   private static final Key<Integer> COMPILER_PROCESS_DEBUG_PORT = Key.create("_compiler_process_debug_port_");
@@ -196,7 +197,8 @@ public final class BuildManager implements Disposable {
     public void runTask() {
       if (shouldSaveDocuments()) {
         ApplicationManager.getApplication().invokeAndWait(() ->
-          ((FileDocumentManagerImpl)FileDocumentManager.getInstance()).saveAllDocuments(false));
+                                                            ((FileDocumentManagerImpl)FileDocumentManager.getInstance())
+                                                              .saveAllDocuments(false));
       }
     }
 
@@ -206,34 +208,47 @@ public final class BuildManager implements Disposable {
     }
   };
 
-  private final Runnable myGCTask = () -> {
-    // todo: make customizable in UI?
-    final int unusedThresholdDays = Registry.intValue("compiler.build.data.unused.threshold", -1);
-    if (unusedThresholdDays <= 0) {
-      return;
-    }
-    File buildSystemDir = getBuildSystemDirectory().toFile();
-    File[] dirs = buildSystemDir.listFiles(pathname -> pathname.isDirectory() && !TEMP_DIR_NAME.equals(pathname.getName()));
-    if (dirs != null) {
-      final Date now = new Date();
-      for (File buildDataProjectDir : dirs) {
-        File usageFile = getUsageFile(buildDataProjectDir);
-        if (usageFile.exists()) {
-          final Pair<Date, File> usageData = readUsageFile(usageFile);
-          if (usageData != null) {
-            final File projectFile = usageData.second;
-            if (projectFile != null && !projectFile.exists() || DateFormatUtil.getDifferenceInDays(usageData.first, now) > unusedThresholdDays) {
-              LOG.info("Clearing project build data because the project does not exist or was not opened for more than " + unusedThresholdDays + " days: " + buildDataProjectDir);
-              FileUtil.delete(buildDataProjectDir);
+
+  private static class GCRunnable implements Runnable {
+
+    private final Path myBuildSystemDir;
+
+    private GCRunnable(Path buildSystemDir) {myBuildSystemDir = buildSystemDir;}
+
+    @Override
+    public void run() {
+      // todo: make customizable in UI?
+      final int unusedThresholdDays = Registry.intValue("compiler.build.data.unused.threshold", -1);
+      if (unusedThresholdDays <= 0) {
+        return;
+      }
+      File buildSystemDir = myBuildSystemDir.toFile();
+      File[] dirs = buildSystemDir.listFiles(pathname -> pathname.isDirectory() && !TEMP_DIR_NAME.equals(pathname.getName()));
+      if (dirs != null) {
+        final Date now = new Date();
+        for (File buildDataProjectDir : dirs) {
+          File usageFile = getUsageFile(buildDataProjectDir);
+          if (usageFile.exists()) {
+            final Pair<Date, File> usageData = readUsageFile(usageFile);
+            if (usageData != null) {
+              final File projectFile = usageData.second;
+              if (projectFile != null && !projectFile.exists() ||
+                  DateFormatUtil.getDifferenceInDays(usageData.first, now) > unusedThresholdDays) {
+                LOG.info("Clearing project build data because the project does not exist or was not opened for more than " +
+                         unusedThresholdDays +
+                         " days: " +
+                         buildDataProjectDir);
+                FileUtil.delete(buildDataProjectDir);
+              }
             }
           }
-        }
-        else {
-          updateUsageFile(null, buildDataProjectDir); // set usage stamp to start countdown
+          else {
+            updateUsageFile(null, buildDataProjectDir); // set usage stamp to start countdown
+          }
         }
       }
     }
-  };
+  }
 
   private final BuildMessageDispatcher myMessageDispatcher = new BuildMessageDispatcher();
 
@@ -273,7 +288,7 @@ public final class BuildManager implements Disposable {
     connection.subscribe(ProjectManager.TOPIC, new ProjectWatcher());
     connection.subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
       @Override
-      public void after(@NotNull List<? extends VFileEvent> events) {
+      public void after(@NotNull List<? extends @NotNull VFileEvent> events) {
         if (!IS_UNIT_TEST_MODE) {
           synchronized (myUnprocessedEvents) {
             myUnprocessedEvents.addAll(events);
@@ -365,8 +380,19 @@ public final class BuildManager implements Disposable {
     ShutDownTracker.getInstance().registerShutdownTask(this::stopListening);
 
     if (!IS_UNIT_TEST_MODE) {
-      ScheduledFuture<?> future = AppExecutorUtil.getAppScheduledExecutorService().scheduleWithFixedDelay(() -> runCommand(myGCTask), 3, 180, TimeUnit.MINUTES);
+      ScheduledFuture<?> future = AppExecutorUtil.getAppScheduledExecutorService()
+        .scheduleWithFixedDelay(() -> runCommand(new GCRunnable(LocalBuildCommandLineBuilder.getLocalBuildSystemDirectory())), 3, 180, TimeUnit.MINUTES);
       Disposer.register(this, () -> future.cancel(false));
+      if (Boolean.valueOf(System.getProperty("compiler.build.data.clean.unused.wsl"))) {
+        WslDistributionManager.getInstance().getInstalledDistributions().forEach(distribution -> {
+          Path wslBuildSystemDirectory = WslBuildCommandLineBuilder.getWslBuildSystemDirectory(distribution);
+          if (wslBuildSystemDirectory != null) {
+            ScheduledFuture<?> wslFuture = AppExecutorUtil.getAppScheduledExecutorService()
+              .scheduleWithFixedDelay(() -> runCommand(new GCRunnable(wslBuildSystemDirectory)), 3, 180, TimeUnit.MINUTES);
+            Disposer.register(this, () -> wslFuture.cancel(false));
+          }
+        });
+      }
     }
   }
 
@@ -494,7 +520,7 @@ public final class BuildManager implements Disposable {
             final UUID sessionId = future.getRequestID();
             final Channel channel = myMessageDispatcher.getConnectedChannel(sessionId);
             if (channel != null) {
-              CmdlineRemoteProto.Message.ControllerMessage.FSEvent event = data.createNextEvent();
+              CmdlineRemoteProto.Message.ControllerMessage.FSEvent event = data.createNextEvent(wslPathMapper(entry.getKey()));
               final CmdlineRemoteProto.Message.ControllerMessage message = CmdlineRemoteProto.Message.ControllerMessage.newBuilder().setType(
                 CmdlineRemoteProto.Message.ControllerMessage.Type.FS_EVENT
               ).setFsEvent(event).build();
@@ -509,6 +535,38 @@ public final class BuildManager implements Disposable {
     });
   }
 
+  @Nullable
+  private static Project findProjectByProjectPath(@NotNull String projectPath) {
+    return ContainerUtil.find(ProjectManager.getInstance().getOpenProjects(), (project) -> projectPath.equals(getProjectPath(project)));
+  }
+
+  @NotNull
+  private static Function<String, String> wslPathMapper(@Nullable WSLDistribution distr) {
+    return distr == null?
+      Function.identity() :
+      // interned paths collapse repeated slashes so \\wsl$ ends up /wsl$
+      path -> path.startsWith("/wsl$")? distr.getWslPath("/" + path) : path;
+  }
+
+  private static Function<String, String> wslPathMapper(@NotNull String projectPath) {
+    return new Function<>() {
+      private Function<String, String> myImpl;
+
+      @Override
+      public String apply(String path) {
+        if (myImpl != null) {
+          return myImpl.apply(path);
+        }
+        if (path.startsWith("/wsl$")) {
+          Project project = findProjectByProjectPath(projectPath);
+          myImpl = wslPathMapper(project != null ? findWSLDistributionForBuild(project) : null);
+          return myImpl.apply(path);
+        }
+        return path;
+      }
+    };
+  }
+
   public static void forceModelLoading(CompileContext context) {
     context.getCompileScope().putUserData(FORCE_MODEL_LOADING_PARAMETER, Boolean.TRUE.toString());
   }
@@ -517,11 +575,16 @@ public final class BuildManager implements Disposable {
     String projectPath = getProjectPath(project);
     cancelPreloadedBuilds(projectPath);
 
+    boolean clearNameCache = false;
     synchronized (myProjectDataMap) {
       ProjectData data = myProjectDataMap.get(projectPath);
       if (data != null) {
         data.dropChanges();
+        clearNameCache = myProjectDataMap.size() == 1;
       }
+    }
+    if (clearNameCache) {
+      InternedPath.clearCache();
     }
     scheduleAutoMake();
   }
@@ -536,6 +599,7 @@ public final class BuildManager implements Disposable {
       }
     }
     if (cleared) {
+      InternedPath.clearCache();
       scheduleAutoMake();
     }
   }
@@ -658,7 +722,7 @@ public final class BuildManager implements Disposable {
       return false;
     }
     final CompilerWorkspaceConfiguration config = CompilerWorkspaceConfiguration.getInstance(project);
-    if (!config.MAKE_PROJECT_ON_SAVE) {
+    if (!config.MAKE_PROJECT_ON_SAVE || !TrustedProjects.isTrusted(project)) {
       return false;
     }
     return config.allowAutoMakeWhileRunningApplication() || !hasRunningProcess(project);
@@ -838,9 +902,12 @@ public final class BuildManager implements Disposable {
                      new HashSet<>(convertToStringPaths(data.myDeleted)));
           }
           needRescan = data.getAndResetRescanFlag();
-          currentFSChanges = needRescan ? null : data.createNextEvent();
+          currentFSChanges = needRescan ? null : data.createNextEvent(wslPathMapper(wslDistribution));
           if (LOG.isDebugEnabled()) {
             LOG.debug("Sending to starting build, ordinal=" + (currentFSChanges == null ? null : currentFSChanges.getOrdinal()));
+          }
+          if (!needRescan && myProjectDataMap.size() == 1) {
+            InternedPath.clearCache();
           }
           projectTaskQueue = data.taskQueue;
         }
@@ -920,12 +987,17 @@ public final class BuildManager implements Disposable {
                 final StringBuilder msg = new StringBuilder();
                 msg.append(JavaCompilerBundle.message("abnormal.build.process.termination")).append(": ");
                 if (errorsOnLaunch != null && errorsOnLaunch.length() > 0) {
-                  msg.append("\n").append(errorsOnLaunch);
-                  if (StringUtil.contains(errorsOnLaunch, "java.lang.NoSuchMethodError")) {
-                    msg.append(
-                      "\nThe error may be caused by JARs in Java Extensions directory which conflicts with libraries used by the external build process.")
-                      .append(
-                        "\nTry adding -Djava.ext.dirs=\"\" argument to 'Build process VM options' in File | Settings | Build, Execution, Deployment | Compiler to fix the problem.");
+                  if (StringUtil.contains(errorsOnLaunch, "io.netty.channel.ConnectTimeoutException") && wslDistribution != null) {
+                    msg.append(JavaCompilerBundle.message("wsl.network.connection.failure"));
+                  }
+                  else {
+                    msg.append("\n").append(errorsOnLaunch);
+                    if (StringUtil.contains(errorsOnLaunch, "java.lang.NoSuchMethodError")) {
+                      msg.append(
+                        "\nThe error may be caused by JARs in Java Extensions directory which conflicts with libraries used by the external build process.")
+                        .append(
+                          "\nTry adding -Djava.ext.dirs=\"\" argument to 'Build process VM options' in File | Settings | Build, Execution, Deployment | Compiler to fix the problem.");
+                    }
                   }
                 }
                 else {
@@ -1336,12 +1408,11 @@ public final class BuildManager implements Disposable {
 
     final File projectSystemRoot = getProjectSystemDirectory(project);
     if (projectSystemRoot != null) {
-      cmdLine.addParameter("-Djava.io.tmpdir=" + FileUtil.toSystemIndependentName(projectSystemRoot.getPath()) + "/" + TEMP_DIR_NAME);
+      cmdLine.addPathParameter("-Djava.io.tmpdir=", FileUtil.toSystemIndependentName(projectSystemRoot.getPath()) + "/" + TEMP_DIR_NAME);
     }
 
     for (BuildProcessParametersProvider provider : BuildProcessParametersProvider.EP_NAME.getExtensions(project)) {
-      final List<String> args = provider.getVMArguments();
-      for (String arg : args) {
+      for (String arg : provider.getVMArguments()) {
         cmdLine.addParameter(arg); // TODO path parameters
       }
     }
@@ -1384,6 +1455,10 @@ public final class BuildManager implements Disposable {
 
     final List<String> cp = myClasspathManager.getBuildProcessClasspath(project);
     cmdLine.addClasspathParameter(cp, isProfilingMode ? Collections.singletonList("yjp-controller-api-redist.jar") : Collections.emptyList());
+
+    for (BuildProcessParametersProvider buildProcessParametersProvider : BuildProcessParametersProvider.EP_NAME.getExtensions(project)) {
+      cmdLine.copyPathToTarget(Iterators.map(buildProcessParametersProvider.getAdditionalPluginPaths(), File::new));
+    }
 
     cmdLine.addParameter(BuildMain.class.getName());
     cmdLine.addParameter(cmdLine.getHostIp());
@@ -1461,15 +1536,31 @@ public final class BuildManager implements Disposable {
   private static boolean shouldIncludeEclipseCompiler(CompilerConfiguration config) {
     if (config instanceof CompilerConfigurationImpl) {
       final BackendCompiler javaCompiler = ((CompilerConfigurationImpl)config).getDefaultCompiler();
-      final String compilerId = javaCompiler != null? javaCompiler.getId() : null;
-      return JavaCompilers.ECLIPSE_ID.equals(compilerId)  || JavaCompilers.ECLIPSE_EMBEDDED_ID.equals(compilerId);
+      final String compilerId = javaCompiler != null ? javaCompiler.getId() : null;
+      return JavaCompilers.ECLIPSE_ID.equals(compilerId) || JavaCompilers.ECLIPSE_EMBEDDED_ID.equals(compilerId);
     }
     return true;
   }
 
+  /**
+   * @deprecated use getBuildSystemDirectory(Project)
+   */
+  @Deprecated
   @NotNull
   public Path getBuildSystemDirectory() {
-    return PathManagerEx.getAppSystemDir().resolve(SYSTEM_ROOT);
+    return LocalBuildCommandLineBuilder.getLocalBuildSystemDirectory();
+  }
+
+  @NotNull
+  public Path getBuildSystemDirectory(Project project) {
+    final WslPath wslPath = WslPath.parseWindowsUncPath(getProjectPath(project));
+    if (wslPath != null) {
+      Path buildDir = WslBuildCommandLineBuilder.getWslBuildSystemDirectory(wslPath.getDistribution());
+      if (buildDir != null) {
+        return buildDir;
+      }
+    }
+    return LocalBuildCommandLineBuilder.getLocalBuildSystemDirectory();
   }
 
   @NotNull
@@ -1479,7 +1570,16 @@ public final class BuildManager implements Disposable {
 
   @Nullable
   public File getProjectSystemDirectory(Project project) {
-    return Utils.getDataStorageRoot(getBuildSystemDirectory().toFile(), getProjectPath(project));
+    String projectPath = getProjectPath(project);
+    WslPath wslPath = WslPath.parseWindowsUncPath(projectPath);
+    Function<String, Integer> hashFunction;
+    if (wslPath == null) {
+      hashFunction = String::hashCode;
+    }
+    else {
+      hashFunction = s -> wslPath.getDistribution().getWslPath(s).hashCode();
+    }
+    return Utils.getDataStorageRoot(getBuildSystemDirectory(project).toFile(), projectPath, hashFunction);
   }
 
   private static File getUsageFile(@NotNull File projectSystemDir) {
@@ -1879,7 +1979,11 @@ public final class BuildManager implements Disposable {
 
     @Override
     public void projectClosed(@NotNull Project project) {
-      myProjectDataMap.remove(getProjectPath(project));
+      if (myProjectDataMap.remove(getProjectPath(project)) != null) {
+        if (myProjectDataMap.isEmpty()) {
+          InternedPath.clearCache();
+        }
+      }
       MessageBusConnection connection = myConnections.remove(project);
       if (connection != null) {
         connection.disconnect();
@@ -1922,18 +2026,18 @@ public final class BuildManager implements Disposable {
       }
     }
 
-    CmdlineRemoteProto.Message.ControllerMessage.FSEvent createNextEvent() {
+    CmdlineRemoteProto.Message.ControllerMessage.FSEvent createNextEvent(Function<String, String> pathMapper) {
       final CmdlineRemoteProto.Message.ControllerMessage.FSEvent.Builder builder =
         CmdlineRemoteProto.Message.ControllerMessage.FSEvent.newBuilder();
       builder.setOrdinal(++myNextEventOrdinal);
 
       for (InternedPath path : myChanged) {
-        builder.addChangedPaths(path.getValue());
+        builder.addChangedPaths(pathMapper.apply(path.getValue()));
       }
       myChanged.clear();
 
       for (InternedPath path : myDeleted) {
-        builder.addDeletedPaths(path.getValue());
+        builder.addDeletedPaths(pathMapper.apply(path.getValue()));
       }
       myDeleted.clear();
 
@@ -1958,19 +2062,21 @@ public final class BuildManager implements Disposable {
   }
 
   private abstract static class InternedPath {
-    protected final int[] myPath;
+    private static final SLRUCache<CharSequence, CharSequence> ourNamesCache = SLRUCache.create(1024, 1024, key -> key);
+    protected final CharSequence[] myPath;
 
     /**
      * @param path assuming system-independent path with forward slashes
      */
     InternedPath(String path) {
-      final IntList list = new IntArrayList();
+      final List<CharSequence> list = new ArrayList<>();
       final StringTokenizer tokenizer = new StringTokenizer(path, "/", false);
-      while(tokenizer.hasMoreTokens()) {
-        final String element = tokenizer.nextToken();
-        list.add(FileNameCache.storeName(element));
+      synchronized (ourNamesCache) {
+        while(tokenizer.hasMoreTokens()) {
+          list.add(ourNamesCache.get(tokenizer.nextToken()));
+        }
       }
-      myPath = list.toIntArray();
+      myPath = list.toArray(CharSequence[]::new);
     }
 
     public abstract String getValue();
@@ -1990,6 +2096,12 @@ public final class BuildManager implements Disposable {
       return Arrays.hashCode(myPath);
     }
 
+    public static void clearCache() {
+      synchronized (ourNamesCache) {
+        ourNamesCache.clear();
+      }
+    }
+
     public static InternedPath create(String path) {
       return path.startsWith("/")? new XInternedPath(path) : new WinInternedPath(path);
     }
@@ -2003,17 +2115,17 @@ public final class BuildManager implements Disposable {
     @Override
     public String getValue() {
       if (myPath.length == 1) {
-        final String name = FileNameCache.getVFileName(myPath[0]).toString();
+        final String name = myPath[0].toString();
         // handle case of windows drive letter
         return name.length() == 2 && name.endsWith(":")? name + "/" : name;
       }
 
       final StringBuilder buf = new StringBuilder();
-      for (int element : myPath) {
+      for (CharSequence element : myPath) {
         if (buf.length() > 0) {
           buf.append("/");
         }
-        buf.append(FileNameCache.getVFileName(element));
+        buf.append(element);
       }
       return buf.toString();
     }
@@ -2028,8 +2140,8 @@ public final class BuildManager implements Disposable {
     public String getValue() {
       if (myPath.length > 0) {
         final StringBuilder buf = new StringBuilder();
-        for (int element : myPath) {
-          buf.append("/").append(FileNameCache.getVFileName(element));
+        for (CharSequence element : myPath) {
+          buf.append("/").append(element);
         }
         return buf.toString();
       }

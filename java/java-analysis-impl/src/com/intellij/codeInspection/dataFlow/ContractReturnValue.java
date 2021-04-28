@@ -25,7 +25,7 @@ public abstract class ContractReturnValue {
   private static final int MAX_SUPPORTED_PARAMETER = 100;
 
   private interface Validator extends Function<PsiMethod, @Nls @Nullable String> {}
-  
+
   private static final Validator NOT_CONSTRUCTOR =
     method -> method.isConstructor() ? JavaAnalysisBundle.message("contract.return.validator.not.applicable.for.constructor") : null;
   private static final Validator NOT_STATIC =
@@ -76,7 +76,6 @@ public abstract class ContractReturnValue {
    * Otherwise the human-readable error message is returned.
    */
   public final @InspectionMessage String getMethodCompatibilityProblem(PsiMethod method) {
-    //noinspection HardCodedStringLiteral
     return validators().map(fn -> fn.apply(method)).filter(Objects::nonNull).findFirst()
                        .map((JavaAnalysisBundle.message("contract.return.value.validation.prefix", this)+' ')::concat)
                        .orElse(null);
@@ -110,10 +109,11 @@ public abstract class ContractReturnValue {
   static DfaValue merge(DfaValue defaultValue, DfaValue newValue, DfaMemoryState memState) {
     if (defaultValue == null || DfaTypeValue.isUnknown(defaultValue)) return newValue;
     if (newValue == null || DfaTypeValue.isUnknown(newValue)) return defaultValue;
+    newValue = DfaUtil.boxUnbox(newValue, defaultValue.getDfType());
     DfType defaultType = memState.getDfType(defaultValue);
     DfType newType = memState.getDfType(newValue);
     DfType result = defaultType.meet(newType);
-    if (result == DfTypes.BOTTOM) return newValue;
+    if (result == DfType.BOTTOM) return newValue;
     if (newValue instanceof DfaVariableValue) {
       memState.meetDfType(newValue, result);
       return newValue;
@@ -132,11 +132,10 @@ public abstract class ContractReturnValue {
    * Converts this return value to the most suitable {@link DfaValue} which represents the same constraints.
    *
    * @param factory a {@link DfaValueFactory} which can be used to create new values if necessary
-   * @param defaultValue a default method return type value in the absence of the contracts (may contain method type information)
    * @param callState call state
    * @return a value which represents the constraints of this contract return value.
    */
-  public abstract DfaValue getDfaValue(DfaValueFactory factory, DfaValue defaultValue, DfaCallState callState);
+  public abstract DfaValue getDfaValue(DfaValueFactory factory, DfaCallState callState);
 
   /**
    * Returns true if the supplied {@link DfaValue} could be compatible with this return value. If false is returned, then
@@ -347,8 +346,8 @@ public abstract class ContractReturnValue {
     }
 
     @Override
-    public DfaValue getDfaValue(DfaValueFactory factory, DfaValue defaultValue, DfaCallState callState) {
-      return defaultValue;
+    public DfaValue getDfaValue(DfaValueFactory factory, DfaCallState callState) {
+      return callState.myReturnValue;
     }
 
     @Override
@@ -364,8 +363,8 @@ public abstract class ContractReturnValue {
     }
 
     @Override
-    public DfaValue getDfaValue(DfaValueFactory factory, DfaValue defaultValue, DfaCallState callState) {
-      return factory.fromDfType(DfTypes.FAIL);
+    public DfaValue getDfaValue(DfaValueFactory factory, DfaCallState callState) {
+      return factory.fromDfType(DfType.FAIL);
     }
 
     @Override
@@ -381,8 +380,8 @@ public abstract class ContractReturnValue {
     }
 
     @Override
-    public DfaValue getDfaValue(DfaValueFactory factory, DfaValue defaultValue, DfaCallState callState) {
-      return factory.getNull();
+    public DfaValue getDfaValue(DfaValueFactory factory, DfaCallState callState) {
+      return factory.fromDfType(DfTypes.NULL);
     }
 
     @Override
@@ -403,8 +402,8 @@ public abstract class ContractReturnValue {
     }
 
     @Override
-    public DfaValue getDfaValue(DfaValueFactory factory, DfaValue defaultValue, DfaCallState callState) {
-      return merge(defaultValue, factory.fromDfType(DfTypes.NOT_NULL_OBJECT), callState.myMemoryState);
+    public DfaValue getDfaValue(DfaValueFactory factory, DfaCallState callState) {
+      return merge(callState.myReturnValue, factory.fromDfType(DfTypes.NOT_NULL_OBJECT), callState.myMemoryState);
     }
 
     @Override
@@ -420,8 +419,8 @@ public abstract class ContractReturnValue {
     }
 
     @Override
-    public DfaValue getDfaValue(DfaValueFactory factory, DfaValue defaultValue, DfaCallState callState) {
-      DfType dfType = callState.myMemoryState.getDfType(defaultValue);
+    public DfaValue getDfaValue(DfaValueFactory factory, DfaCallState callState) {
+      DfType dfType = callState.myMemoryState.getDfType(callState.myReturnValue);
       dfType = dfType.meet(DfTypes.NOT_NULL_OBJECT);
       if (callState.myCallArguments.myMutation.isPure()) {
         boolean unmodifiableView = Mutability.fromDfType(dfType) == Mutability.UNMODIFIABLE_VIEW;
@@ -431,7 +430,7 @@ public abstract class ContractReturnValue {
           dfType = dfType.meet(DfTypes.LOCAL_OBJECT);
         }
       }
-      return merge(defaultValue, factory.fromDfType(dfType), callState.myMemoryState);
+      return merge(callState.myReturnValue, factory.fromDfType(dfType), callState.myMemoryState);
     }
 
     @Override
@@ -466,12 +465,12 @@ public abstract class ContractReturnValue {
     }
 
     @Override
-    public DfaValue getDfaValue(DfaValueFactory factory, DfaValue defaultValue, DfaCallState callState) {
+    public DfaValue getDfaValue(DfaValueFactory factory, DfaCallState callState) {
       DfaValue qualifier = callState.myCallArguments.myQualifier;
       if (qualifier != null && !DfaTypeValue.isUnknown(qualifier)) {
-        return merge(defaultValue, qualifier, callState.myMemoryState);
+        return merge(callState.myReturnValue, qualifier, callState.myMemoryState);
       }
-      return merge(defaultValue, factory.fromDfType(DfTypes.NOT_NULL_OBJECT), callState.myMemoryState);
+      return merge(callState.myReturnValue, factory.fromDfType(DfTypes.NOT_NULL_OBJECT), callState.myMemoryState);
     }
 
     @Override
@@ -510,8 +509,8 @@ public abstract class ContractReturnValue {
     }
 
     @Override
-    public DfaValue getDfaValue(DfaValueFactory factory, DfaValue defaultValue, DfaCallState callState) {
-      return factory.getBoolean(myValue);
+    public DfaValue getDfaValue(DfaValueFactory factory, DfaCallState callState) {
+      return DfaUtil.boxUnbox(factory.fromDfType(DfTypes.booleanValue(myValue)), callState.myReturnValue.getDfType());
     }
 
     @Override
@@ -544,7 +543,7 @@ public abstract class ContractReturnValue {
         PsiType parameterType = parameters[myParamNumber].getType();
         PsiType returnType = method.getReturnType();
         if (returnType != null && !returnType.isConvertibleFrom(parameterType)) {
-          return JavaAnalysisBundle.message("contract.return.validator.incompatible.return.parameter.type", 
+          return JavaAnalysisBundle.message("contract.return.validator.incompatible.return.parameter.type",
                                             returnType.getPresentableText(), parameterType.getPresentableText());
         }
         return null;
@@ -557,12 +556,12 @@ public abstract class ContractReturnValue {
     }
 
     @Override
-    public DfaValue getDfaValue(DfaValueFactory factory, DfaValue defaultValue, DfaCallState callState) {
+    public DfaValue getDfaValue(DfaValueFactory factory, DfaCallState callState) {
       if (callState.myCallArguments.myArguments != null && callState.myCallArguments.myArguments.length > myParamNumber) {
         DfaValue argument = callState.myCallArguments.myArguments[myParamNumber];
-        return merge(defaultValue, argument, callState.myMemoryState);
+        return merge(callState.myReturnValue, argument, callState.myMemoryState);
       }
-      return defaultValue;
+      return callState.myReturnValue;
     }
 
     @Override

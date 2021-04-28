@@ -178,6 +178,13 @@ public final class EditorMarkupModelImpl extends MarkupModelImpl
 
     ActionButtonLook editorButtonLook = new EditorToolbarButtonLook();
     statusToolbar = new ActionToolbarImpl(ActionPlaces.EDITOR_INSPECTIONS_TOOLBAR, actions, true) {
+
+      @Override
+      public void addNotify() {
+        setTargetComponent(editor.getContentComponent());
+        super.addNotify();
+      }
+
       @Override
       protected void paintComponent(Graphics g) {
         editorButtonLook.paintBackground(g, this, myEditor.getBackgroundColor());
@@ -233,7 +240,7 @@ public final class EditorMarkupModelImpl extends MarkupModelImpl
       }
 
       @Override
-      protected JComponent createCustomComponent(@NotNull CustomComponentAction action, @NotNull Presentation presentation) {
+      protected @NotNull JComponent createCustomComponent(@NotNull CustomComponentAction action, @NotNull Presentation presentation) {
         JComponent component = super.createCustomComponent(action, presentation);
         if (component instanceof ActionButton) {
           ((ActionButton)component).setLook(editorButtonLook);
@@ -1546,9 +1553,9 @@ public final class EditorMarkupModelImpl extends MarkupModelImpl
             ActionManagerEx manager = ActionManagerEx.getInstanceEx();
             manager.fireBeforeActionPerformed(action, context, event);
 
-            action.actionPerformed(event);
+            ActionUtil.performAction(action, event);
 
-            manager.queueActionPerformedEvent(action, context, event);
+            manager.fireAfterActionPerformed(action, context, event);
             ActionsCollector.getInstance().record(event.getProject(), action, event, null);
 
             ActionToolbar toolbar = ActionToolbar.findToolbarBy(StatusButton.this);

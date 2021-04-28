@@ -57,10 +57,12 @@ class TestIndexInfrastructureExtension : FileBasedIndexInfrastructureExtension {
 
   override fun onStubIndexVersionChanged(indexId: StubIndexKey<*, *>) = Unit
 
-  override fun initialize(): FileBasedIndexInfrastructureExtension.InitializationResult
+  override fun initialize(indexLayoutId: String?): FileBasedIndexInfrastructureExtension.InitializationResult
   = FileBasedIndexInfrastructureExtension.InitializationResult.INDEX_REBUILD_REQUIRED
 
   override fun resetPersistentState() = Unit
+
+  override fun resetPersistentState(indexId: ID<*, *>) = Unit
 
   override fun shutdown() = Unit
 

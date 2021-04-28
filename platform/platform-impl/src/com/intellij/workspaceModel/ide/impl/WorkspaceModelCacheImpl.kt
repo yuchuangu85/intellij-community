@@ -6,12 +6,11 @@ import com.intellij.ide.plugins.PluginManager
 import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.appSystemDir
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.project.clearCachesForAllProjects
 import com.intellij.openapi.project.getProjectDataPath
+import com.intellij.openapi.project.projectsDataDir
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.util.io.exists
@@ -21,6 +20,7 @@ import com.intellij.util.pooledThreadSingleAlarm
 import com.intellij.workspaceModel.ide.*
 import com.intellij.workspaceModel.storage.*
 import com.intellij.workspaceModel.storage.bridgeEntities.ModuleEntity
+import com.intellij.workspaceModel.storage.impl.ConsistencyCheckingMode
 import com.intellij.workspaceModel.storage.impl.EntityStorageSerializerImpl
 import com.intellij.workspaceModel.storage.impl.isConsistent
 import com.intellij.workspaceModel.storage.url.VirtualFileUrlManager
@@ -117,7 +117,7 @@ class WorkspaceModelCacheImpl(private val project: Project, parentDisposable: Di
       LOG.debug("Loading project model cache from $cacheFile")
 
       val stopWatch = Stopwatch.createStarted()
-      val builder = cacheFile.inputStream().use { serializer.deserializeCache(it) }
+      val builder = cacheFile.inputStream().use { serializer.deserializeCache(it, ConsistencyCheckingMode.defaultIde()) }
       LOG.debug("Loaded project model cache from $cacheFile in ${stopWatch.stop()}")
 
       return builder
@@ -183,13 +183,13 @@ class WorkspaceModelCacheImpl(private val project: Project, parentDisposable: Di
 
   companion object {
     private val LOG = logger<WorkspaceModelCacheImpl>()
-    private const val DATA_DIR_NAME = "project-model-cache"
+    internal const val DATA_DIR_NAME = "project-model-cache"
 
     @TestOnly
     var testCacheFile: File? = null
 
     private val cachesInvalidated = AtomicBoolean(false)
-    private val invalidateCachesMarkerFile = File(appSystemDir.resolve("projectModelCache").toFile(), ".invalidate")
+    internal val invalidateCachesMarkerFile = File(projectsDataDir.toFile(), ".invalidate")
 
     fun invalidateCaches() {
       LOG.info("Invalidating caches by creating $invalidateCachesMarkerFile")
@@ -202,10 +202,6 @@ class WorkspaceModelCacheImpl(private val project: Project, parentDisposable: Di
       }
       catch (t: Throwable) {
         LOG.warn("Cannot update the invalidation marker file", t)
-      }
-
-      ApplicationManager.getApplication().executeOnPooledThread {
-        clearCachesForAllProjects(DATA_DIR_NAME)
       }
     }
   }

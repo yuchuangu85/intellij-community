@@ -1,8 +1,8 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vfs.newvfs.impl;
 
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.impl.ApplicationInfoImpl;
+import com.intellij.openapi.application.ex.ApplicationManagerEx;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Key;
@@ -401,13 +401,13 @@ public class VirtualDirectoryImpl extends VirtualFileSystemEntry {
           CharSequence name2 = o2.getName();
           int cmp = compareNames(name1, name2, caseSensitive);
           if (cmp == 0 && name1 != name2 && errorsCount[0] < 10) {
-            LOG.error(ourPersistence + " returned duplicate file names(" + name1 + "," + name2 + ")" +
+            LOG.error(ourPersistence + " returned duplicate file names('" + name1 + "', '" + name2 + "')" +
                       " caseSensitive: " + caseSensitive +
                       " SystemInfo.isFileSystemCaseSensitive: " + SystemInfo.isFileSystemCaseSensitive +
                       " isCaseSensitive(): " + isCaseSensitive() +
                       " SystemInfo.OS: " + SystemInfo.OS_NAME + " " + SystemInfo.OS_VERSION +
                       " wasChildrenLoaded: " + wasChildrenLoaded +
-                      " in the dir: " + this + ";" +
+                      " in the dir: " + this + "; " + children.size() +
                       " children: " + StringUtil.first(children.toString(), 300, true));
             errorsCount[0]++;
             if (!caseSensitive) {
@@ -456,7 +456,7 @@ public class VirtualDirectoryImpl extends VirtualFileSystemEntry {
   }
 
   private void assertConsistency(boolean caseSensitive, @NotNull Object details) {
-    if (!CHECK || ApplicationInfoImpl.isInStressTest()) return;
+    if (!CHECK || ApplicationManagerEx.isInStressTest()) return;
     int[] childrenIds = myData.myChildrenIds;
     if (childrenIds.length == 0) return;
     VfsData vfsData = getVfsData();
@@ -558,23 +558,12 @@ public class VirtualDirectoryImpl extends VirtualFileSystemEntry {
     // optimization: when there are many children, it's cheaper to
     // merge sorted added and existing lists just like in merge sort
     final boolean caseSensitive = isCaseSensitive();
-    Comparator<ChildInfo> pairComparator = (p1, p2) -> compareNames(p1.getName(), p2.getName(), caseSensitive);
-    added.sort(pairComparator);
+    Comparator<ChildInfo> byName = (p1, p2) -> compareNames(p1.getName(), p2.getName(), caseSensitive);
+    added.sort(byName);
 
     synchronized (myData) {
       int[] oldIds = myData.myChildrenIds;
       IntList mergedIds = new IntArrayList(oldIds.length + added.size());
-      //noinspection ForLoopReplaceableByForEach
-      for (int i = 0; i < added.size(); i++) {
-        ChildInfo info = added.get(i);
-        assert info.getId() > 0 : info;
-        @PersistentFS.Attributes
-        int attributes = info.getFileAttributeFlags();
-        boolean isEmptyDirectory = info.getChildren() != null && info.getChildren().length == 0;
-        myData.removeAdoptedName(info.getName());
-        VirtualFileSystemEntry file = createChild(info.getId(), info.getNameId(), getFileSystem(), attributes, isEmptyDirectory);
-        fileCreated.consume(file, info);
-      }
       VfsData vfsData = getVfsData();
       List<ChildInfo> existingChildren = new AbstractList<>() {
         @Override
@@ -590,7 +579,18 @@ public class VirtualDirectoryImpl extends VirtualFileSystemEntry {
           return oldIds.length;
         }
       };
-      ContainerUtil.processSortedListsInOrder(added, existingChildren, pairComparator, true, (nextInfo,__) -> mergedIds.add(nextInfo.getId()));
+      ContainerUtil.processSortedListsInOrder(existingChildren, added, byName, true, (nextInfo, isFileExistsAlready) -> {
+        if (!isFileExistsAlready) {
+          assert nextInfo.getId() > 0 : nextInfo;
+          @PersistentFS.Attributes
+          int attributes = nextInfo.getFileAttributeFlags();
+          boolean isEmptyDirectory = nextInfo.getChildren() != null && nextInfo.getChildren().length == 0;
+          myData.removeAdoptedName(nextInfo.getName());
+          VirtualFileSystemEntry file = createChild(nextInfo.getId(), nextInfo.getNameId(), getFileSystem(), attributes, isEmptyDirectory);
+          fileCreated.consume(file, nextInfo);
+        }
+        mergedIds.add(nextInfo.getId());
+      });
       myData.myChildrenIds = mergedIds.toIntArray();
 
       if (markAllChildrenLoaded) {

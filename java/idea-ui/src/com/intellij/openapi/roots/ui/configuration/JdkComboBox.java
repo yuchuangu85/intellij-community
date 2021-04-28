@@ -29,7 +29,7 @@ import static com.intellij.openapi.roots.ui.configuration.JdkComboBox.JdkComboBo
  * @author Eugene Zhuravlev
  */
 public class JdkComboBox extends SdkComboBoxBase<JdkComboBoxItem> {
-  private static final Logger LOG = Logger.getInstance(JdkComboBox.class);
+  private final @Nullable Project myProject;
   @NotNull private final Consumer<Sdk> myOnNewSdkAdded;
 
   @Nullable private JButton mySetUpButton;
@@ -89,8 +89,28 @@ public class JdkComboBox extends SdkComboBoxBase<JdkComboBoxItem> {
                      @Nullable Condition<? super Sdk> sdkFilter,
                      @Nullable Condition<? super SdkTypeId> creationFilter,
                      @Nullable Consumer<? super Sdk> onNewSdkAdded) {
+    this(project, sdkModel, sdkTypeFilter, sdkFilter, null, creationFilter, onNewSdkAdded);
+  }
+
+  /**
+   * Creates new Sdk selector combobox
+   * @param project current project (if any)
+   * @param sdkModel the sdks model
+   * @param sdkTypeFilter sdk types filter predicate to show
+   * @param sdkFilter filters Sdk instances that are listed, it implicitly includes the {@param sdkTypeFilter}
+   * @param suggestedSdkFilter
+   * @param creationFilter a filter of SdkType that allowed to create a new Sdk with that control
+   * @param onNewSdkAdded a callback that is executed once a new Sdk is added to the list
+   */
+  public JdkComboBox(@Nullable Project project,
+                     @NotNull ProjectSdksModel sdkModel,
+                     @Nullable Condition<? super SdkTypeId> sdkTypeFilter,
+                     @Nullable Condition<? super Sdk> sdkFilter,
+                     @Nullable Condition<? super SdkListItem.SuggestedItem> suggestedSdkFilter,
+                     @Nullable Condition<? super SdkTypeId> creationFilter,
+                     @Nullable Consumer<? super Sdk> onNewSdkAdded) {
     this(project,
-         new SdkListModelBuilder(project, sdkModel, sdkTypeFilter, SimpleJavaSdkType.notSimpleJavaSdkType(creationFilter), sdkFilter),
+         new SdkListModelBuilder(project, sdkModel, sdkTypeFilter, SimpleJavaSdkType.notSimpleJavaSdkType(creationFilter), sdkFilter, suggestedSdkFilter, null),
          onNewSdkAdded);
   }
 
@@ -103,6 +123,7 @@ public class JdkComboBox extends SdkComboBoxBase<JdkComboBoxItem> {
                      @NotNull SdkListModelBuilder modelBuilder,
                      @Nullable Consumer<? super Sdk> onNewSdkAdded) {
     super(modelBuilder);
+    myProject = project;
     myOnNewSdkAdded = sdk -> {
       if (onNewSdkAdded != null) {
         onNewSdkAdded.consume(sdk);
@@ -223,10 +244,18 @@ public class JdkComboBox extends SdkComboBoxBase<JdkComboBoxItem> {
     return (JdkComboBoxItem)super.getSelectedItem();
   }
 
-  @Nullable
-  public Sdk getSelectedJdk() {
-    final JdkComboBoxItem selectedItem = getSelectedItem();
-    return selectedItem != null? selectedItem.getJdk() : null;
+  /**
+   * Returns selected JDK or null if there is no selection or Project JDK inherited.
+   *
+   * @see #isProjectJdkSelected()
+   */
+  public @Nullable Sdk getSelectedJdk() {
+    JdkComboBoxItem selectedItem = getSelectedItem();
+    return selectedItem != null ? selectedItem.getJdk() : null;
+  }
+
+  public boolean isProjectJdkSelected() {
+    return getSelectedItem() instanceof ProjectJdkComboBoxItem;
   }
 
   public void setSelectedJdk(@Nullable Sdk jdk) {
@@ -266,7 +295,8 @@ public class JdkComboBox extends SdkComboBoxBase<JdkComboBoxItem> {
 
     DialogWrapper dialogWrapper = DialogWrapper.findInstance(this);
     if (dialogWrapper == null) {
-      LOG.warn("Cannot find DialogWrapper parent for the JdkComboBox " + this + ", SDK search is disabled", new RuntimeException());
+      Logger.getInstance(JdkComboBox.class)
+        .warn("Cannot find DialogWrapper parent for the JdkComboBox " + this + ", SDK search is disabled", new RuntimeException());
       return;
     }
 

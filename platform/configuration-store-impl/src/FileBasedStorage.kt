@@ -1,4 +1,4 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.configurationStore
 
 import com.intellij.notification.Notification
@@ -10,15 +10,14 @@ import com.intellij.openapi.components.RoamingType
 import com.intellij.openapi.components.StateStorageOperation
 import com.intellij.openapi.components.StoragePathMacros
 import com.intellij.openapi.diagnostic.debug
-import com.intellij.openapi.diagnostic.debugOrInfoIfTestMode
 import com.intellij.openapi.fileEditor.impl.LoadTextUtil
 import com.intellij.openapi.util.JDOMUtil
 import com.intellij.openapi.util.io.BufferExposingByteArrayOutputStream
 import com.intellij.openapi.util.io.FileUtilRt
+import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.ArrayUtil
 import com.intellij.util.LineSeparator
-import com.intellij.util.io.inputStreamSkippingBom
 import com.intellij.util.io.readCharSequence
 import com.intellij.util.io.systemIndependentPath
 import org.jdom.Element
@@ -116,7 +115,7 @@ open class FileBasedStorage(file: Path,
         }
         else -> {
           val file = storage.file
-          LOG.debugOrInfoIfTestMode { "Save $file" }
+          LOG.debug { "Save $file" }
           try {
             dataWriter.writeTo(file, this, lineSeparator.separatorString)
           }
@@ -196,10 +195,10 @@ open class FileBasedStorage(file: Path,
     if (isUseUnixLineSeparator) {
       // do not load the whole data into memory if no need to detect line separator
       lineSeparator = LineSeparator.LF
-      return JDOMUtil.load(file.inputStreamSkippingBom().reader())
+      return JDOMUtil.load(Files.newInputStream(file))
     }
     else {
-      val data = file.inputStreamSkippingBom().reader().readCharSequence(attributes.size().toInt())
+      val data = CharsetToolkit.inputStreamSkippingBOM(Files.newInputStream(file)).reader().readCharSequence(attributes.size().toInt())
       lineSeparator = detectLineSeparators(data, if (isUseXmlProlog) null else LineSeparator.LF)
       return JDOMUtil.load(data)
     }
@@ -309,7 +308,7 @@ private fun isEqualContent(result: VirtualFile,
 }
 
 private fun doWrite(requestor: StorageManagerFileWriteRequestor, file: VirtualFile, dataWriterOrByteArray: Any, lineSeparator: LineSeparator, prependXmlProlog: Boolean) {
-  LOG.debugOrInfoIfTestMode { "Save ${file.presentableUrl}" }
+  LOG.debug { "Save ${file.presentableUrl}" }
 
   if (!file.isWritable) {
     // may be element is not long-lived, so, we must write it to byte array

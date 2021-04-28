@@ -2,6 +2,7 @@
 package com.intellij.find.impl;
 
 import com.intellij.CommonBundle;
+import com.intellij.accessibility.TextFieldWithListAccessibleContext;
 import com.intellij.execution.runners.ExecutionUtil;
 import com.intellij.find.*;
 import com.intellij.find.actions.ShowUsagesAction;
@@ -64,6 +65,7 @@ import com.intellij.ui.components.*;
 import com.intellij.ui.hover.TableHoverListener;
 import com.intellij.ui.mac.TouchbarDataKeys;
 import com.intellij.ui.popup.PopupState;
+import com.intellij.ui.render.RenderingUtil;
 import com.intellij.ui.scale.JBUIScale;
 import com.intellij.ui.table.JBTable;
 import com.intellij.usageView.UsageInfo;
@@ -74,7 +76,6 @@ import com.intellij.util.*;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.JBIterable;
 import com.intellij.util.ui.*;
-import com.intellij.accessibility.TextFieldWithListAccessibleContext;
 import net.miginfocom.swing.MigLayout;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
@@ -344,15 +345,23 @@ public class FindPopupPanel extends JBPanel<FindPopupPanel> implements FindUI {
       WindowAdapter focusListener = new WindowAdapter() {
         @Override
         public void windowGainedFocus(WindowEvent e) {
-          super.windowGainedFocus(e);
-          if (canBeClosed() && !myIsPinned.get()) {
-            //closeImmediately();
-            myDialog.doCancelAction();
-          }
+          closeIfPossible();
         }
       };
 
       dialogWindow.addWindowListener(new WindowAdapter() {
+        @Override
+        public void windowDeactivated(WindowEvent e) {
+          // At the moment of deactivation there is just "temporary" focus owner (main frame),
+          // true focus owner (Search Everywhere popup etc.) appears later so the check should postponed too
+          ApplicationManager.getApplication().invokeLater(() -> {
+            Window w = ComponentUtil.getWindow(IdeFocusManager.getInstance(myProject).getFocusOwner());
+            if (w != null && w.getOwner() != dialogWindow) {
+              closeIfPossible();
+            }
+          }, ModalityState.current());
+        }
+
         @Override
         public void windowOpened(WindowEvent e) {
           Arrays.stream(Frame.getFrames())
@@ -379,6 +388,12 @@ public class FindPopupPanel extends JBPanel<FindPopupPanel> implements FindUI {
         });
       }
       ApplicationManager.getApplication().invokeLater(this::scheduleResultsUpdate, ModalityState.any());
+    }
+  }
+
+  private void closeIfPossible() {
+    if (canBeClosed() && !myIsPinned.get()) {
+      myDialog.doCancelAction();
     }
   }
 
@@ -607,6 +622,7 @@ public class FindPopupPanel extends JBPanel<FindPopupPanel> implements FindUI {
       }
     };
     myResultsPreviewTable.setFocusable(false);
+    myResultsPreviewTable.putClientProperty(RenderingUtil.ALWAYS_PAINT_SELECTION_AS_FOCUSED, true);
     myResultsPreviewTable.getEmptyText().setShowAboveCenter(false);
     myResultsPreviewTable.setShowColumns(false);
     myResultsPreviewTable.getSelectionModel().setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
@@ -1135,7 +1151,8 @@ public class FindPopupPanel extends JBPanel<FindPopupPanel> implements FindUI {
     if (mySearchRescheduleOnCancellationsAlarm == null || mySearchRescheduleOnCancellationsAlarm.isDisposed()) return;
     updateControls();
     mySearchRescheduleOnCancellationsAlarm.cancelAllRequests();
-    mySearchRescheduleOnCancellationsAlarm.addRequest(this::findSettingsChanged, 100);
+    mySearchRescheduleOnCancellationsAlarm.addRequest(this::findSettingsChanged,
+                                                      Registry.intValue("ide.find.in.files.reschedule.delay", 100));
   }
 
   private void finishPreviousPreviewSearch() {
@@ -1336,13 +1353,19 @@ public class FindPopupPanel extends JBPanel<FindPopupPanel> implements FindUI {
     myInfoLabel.setText(null);
   }
 
-  private void showEmptyText(@Nullable String message) {
+  private void showEmptyText(@Nullable @NlsContexts.StatusText String message) {
     StatusText emptyText = myResultsPreviewTable.getEmptyText();
     emptyText.clear();
-    emptyText.setText(message != null ? FindBundle.message("message.nothingFound.with.problem", message)
-                                      : FindBundle.message("message.nothingFound"));
     FindModel model = myHelper.getModel();
+    boolean dotAdded = false;
+    if (StringUtil.isEmpty(model.getStringToFind())) {
+      emptyText.setText(FindBundle.message("message.type.search.query"));
+    } else {
+      emptyText.setText(message != null ? message : FindBundle.message("message.nothingFound"));
+    }
     if (mySelectedScope == FindPopupScopeUIImpl.DIRECTORY && !model.isWithSubdirectories()) {
+      emptyText.appendText(".");
+      dotAdded = true;
       emptyText.appendSecondaryText(FindBundle.message("find.recursively.hint"),
                                                                SimpleTextAttributes.LINK_ATTRIBUTES,
                                     e -> {
@@ -1394,6 +1417,7 @@ public class FindPopupPanel extends JBPanel<FindPopupPanel> implements FindUI {
       usedOptions.add(model);
     }
     if (!usedOptions.isEmpty()) {
+      if (!dotAdded) emptyText.appendText(".");
       emptyText.appendLine(" ");
       if (couldBeRegexp) {
         emptyText.appendLine(FindBundle.message("message.nothingFound.search.with.regex"), LINK_PLAIN_ATTRIBUTES, __ -> {
@@ -1420,10 +1444,6 @@ public class FindPopupPanel extends JBPanel<FindPopupPanel> implements FindUI {
         emptyText.appendLine(FindBundle.message("message.nothingFound.clearOption"), LINK_PLAIN_ATTRIBUTES,
                              __ -> resetAllFilters()).appendText(" " + getOptionText(myResetFiltersAction, true));
       }
-    }
-    else {
-      emptyText.appendLine(" ");
-      emptyText.appendLine(FindBundle.message("message.nothingFound.default.hint"));
     }
   }
 
@@ -1908,8 +1928,8 @@ public class FindPopupPanel extends JBPanel<FindPopupPanel> implements FindUI {
     };
 
     private final ColoredTableCellRenderer myFileAndLineNumber = new ColoredTableCellRenderer() {
-      private final SimpleTextAttributes ORDINAL_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, JBColor.namedColor("SearchResults.Ordinal.File.Foreground", 0x999999, 0x999999));
-      private final SimpleTextAttributes REPEATED_FILE_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, JBColor.namedColor("SearchResults.Repeated.File.Foreground", 0xCCCCCC, 0x5E5E5E));
+      private final SimpleTextAttributes ORDINAL_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, JBColor.namedColor("Component.infoForeground", 0x999999, 0x999999));
+      private final SimpleTextAttributes REPEATED_FILE_ATTRIBUTES = new SimpleTextAttributes(STYLE_PLAIN, ColorUtil.withAlpha(JBColor.namedColor("Component.infoForeground", 0xCCCCCC, 0x5E5E5E), .5));
 
       @Override
       protected void customizeCellRenderer(@NotNull JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {

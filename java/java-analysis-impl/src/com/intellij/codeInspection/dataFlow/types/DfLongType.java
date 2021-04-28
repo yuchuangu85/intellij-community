@@ -3,19 +3,20 @@ package com.intellij.codeInspection.dataFlow.types;
 
 import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeBinOp;
 import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeSet;
+import com.intellij.codeInspection.dataFlow.value.RelationType;
 import com.intellij.psi.PsiPrimitiveType;
 import com.intellij.psi.PsiType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public interface DfLongType extends DfIntegralType {
+public interface DfLongType extends DfJvmIntegralType {
   @Override
   @NotNull
   LongRangeSet getRange();
 
   @Override
   default boolean isSuperType(@NotNull DfType other) {
-    if (other == DfTypes.BOTTOM) return true;
+    if (other == DfType.BOTTOM) return true;
     if (!(other instanceof DfLongType)) return false;
     DfLongType longType = (DfLongType)other;
     return getRange().contains(longType.getRange()) &&
@@ -29,6 +30,12 @@ public interface DfLongType extends DfIntegralType {
   }
 
   @Override
+  @NotNull
+  default DfType fromRelation(@NotNull RelationType relationType) {
+    return DfTypes.longRange(getRange().fromRelation(relationType));
+  }
+
+  @Override
   default @NotNull DfType eval(@NotNull DfType other, @NotNull LongRangeBinOp op) {
     if (!(other instanceof DfLongType || other instanceof DfIntType && op.isShift())) return DfTypes.LONG;
     LongRangeSet result = op.eval(getRange(), ((DfIntegralType)other).getRange(), true);
@@ -39,8 +46,8 @@ public interface DfLongType extends DfIntegralType {
   @NotNull
   @Override
   default DfType join(@NotNull DfType other) {
-    if (other == DfTypes.BOTTOM) return this;
-    if (!(other instanceof DfLongType)) return DfTypes.TOP;
+    if (other == DfType.BOTTOM) return this;
+    if (!(other instanceof DfLongType)) return DfType.TOP;
     LongRangeSet range = ((DfLongType)other).getRange().unite(getRange());
     LongRangeSet wideRange = ((DfLongType)other).getWideRange().unite(getWideRange());
     return DfTypes.longRange(range, wideRange);
@@ -49,8 +56,8 @@ public interface DfLongType extends DfIntegralType {
   @NotNull
   @Override
   default DfType meet(@NotNull DfType other) {
-    if (other == DfTypes.TOP) return this;
-    if (!(other instanceof DfLongType)) return DfTypes.BOTTOM;
+    if (other == DfType.TOP) return this;
+    if (!(other instanceof DfLongType)) return DfType.BOTTOM;
     LongRangeSet range = ((DfLongType)other).getRange().intersect(getRange());
     LongRangeSet wideRange = ((DfLongType)other).getWideRange().intersect(getWideRange());
     return DfTypes.longRange(range, wideRange);

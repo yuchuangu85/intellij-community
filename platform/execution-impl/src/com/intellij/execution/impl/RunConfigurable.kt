@@ -7,6 +7,7 @@ import com.intellij.execution.configurations.*
 import com.intellij.execution.configurations.ConfigurationTypeUtil.isEditableInDumbMode
 import com.intellij.execution.impl.RunConfigurable.Companion.collectNodesRecursively
 import com.intellij.execution.impl.RunConfigurableNodeKind.*
+import com.intellij.execution.impl.statistics.RunConfigurationOptionUsagesCollector
 import com.intellij.icons.AllIcons
 import com.intellij.ide.DataManager
 import com.intellij.ide.IdeBundle
@@ -35,6 +36,7 @@ import com.intellij.openapi.wm.IdeFocusManager.getGlobalInstance
 import com.intellij.ui.*
 import com.intellij.ui.RowsDnDSupport.RefinedDropSupport.Position.*
 import com.intellij.ui.SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES
+import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBPanelWithEmptyText
 import com.intellij.ui.mac.TouchbarDataKeys
 import com.intellij.ui.popup.PopupState
@@ -57,6 +59,7 @@ import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.awt.datatransfer.Transferable
 import java.awt.event.KeyEvent
+import java.awt.event.MouseEvent
 import java.util.concurrent.Callable
 import java.util.function.ToIntFunction
 import javax.swing.*
@@ -104,8 +107,6 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
   protected var toolbarDecorator: ToolbarDecorator? = null
   private var isFolderCreating = false
   protected val toolbarAddAction = MyToolbarAddAction()
-  private val runDashboardTypesPanel = RunDashboardTypesPanel(project)
-
   private var isModified = false
 
   companion object {
@@ -150,7 +151,7 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
       getTypesToShow(project, showApplicableTypesOnly, allTypes, hideVirtualConfigurations)
         .sortedWith(kotlin.Comparator { type1, type2 -> compareTypesForUi(type1!!, type2!!) })
 
-    internal fun getTypesToShow(project: Project, showApplicableTypesOnly: Boolean, allTypes: List<ConfigurationType>, hideVirtualConfigurations : Boolean = false): List<ConfigurationType> {
+    fun getTypesToShow(project: Project, showApplicableTypesOnly: Boolean, allTypes: List<ConfigurationType>, hideVirtualConfigurations : Boolean = false): List<ConfigurationType> {
       val allVisibleTypes = if (hideVirtualConfigurations) allTypes.filter { it !is VirtualConfigurationType } else allTypes
       if (showApplicableTypesOnly) {
         val applicableTypes = allVisibleTypes.filter { configurationType -> configurationType.configurationFactories.any { it.isApplicable(project) } }
@@ -217,17 +218,8 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
         else if (userObject is String) {
           showFolderField(node, userObject)
         }
-        else if (userObject is ConfigurationFactory) {
-          showTemplateConfigurable(userObject)
-        }
-        else if (userObject is ConfigurationType) {
-          val factories = userObject.configurationFactories
-          if (factories.size == 1) {
-            showTemplateConfigurable(factories[0])
-          }
-          else {
-            drawPressAddButtonMessage(userObject)
-          }
+        else if (userObject is ConfigurationFactory || userObject is ConfigurationType) {
+          typeOrFactorySelected(userObject);
         }
       }
       updateDialog()
@@ -236,10 +228,22 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
     sortTopLevelBranches()
     tree.emptyText.appendText(ExecutionBundle.message("status.text.no.run.configurations.added")).appendLine(
       ExecutionBundle.message("status.text.add.new"), LINK_PLAIN_ATTRIBUTES) {
-      toolbarAddAction.showAddPopup(true, tree)}
+      toolbarAddAction.showAddPopup(true, it.source as MouseEvent)}
     val shortcut = KeymapUtil.getShortcutsText(toolbarAddAction.shortcutSet.shortcuts)
     if (shortcut.isNotEmpty()) tree.emptyText.appendText(" $shortcut")
     (tree.model as DefaultTreeModel).reload()
+  }
+
+  protected open fun typeOrFactorySelected(userObject: Any) {
+    if (userObject is ConfigurationType && userObject.configurationFactories.size == 1) {
+      showTemplateConfigurable(userObject.configurationFactories.first())
+    }
+    else if (userObject is ConfigurationFactory) {
+      showTemplateConfigurable(userObject)
+    }
+    else {
+      updateRightPanel(null)
+    }
   }
 
   protected open fun addRunConfigurationsToModel(model: DefaultMutableTreeNode) {
@@ -266,6 +270,12 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
   }
 
   private fun selectConfiguration(configuration: RunConfiguration): Boolean {
+    val node = findNode(configuration) ?: return false
+    TreeUtil.selectInTree(node, true, tree)
+    return true
+  }
+
+  private fun findNode(configuration: RunConfiguration): DefaultMutableTreeNode? {
     val enumeration = root.breadthFirstEnumeration()
     while (enumeration.hasMoreElements()) {
       val node = enumeration.nextElement() as DefaultMutableTreeNode
@@ -276,12 +286,11 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
       if (userObject is RunnerAndConfigurationSettingsImpl) {
         val otherConfiguration = (userObject as RunnerAndConfigurationSettings).configuration
         if (otherConfiguration.factory?.type?.id == configuration.factory?.type?.id && otherConfiguration.name == configuration.name) {
-          TreeUtil.selectInTree(node, true, tree)
-          return true
+          return node
         }
       }
     }
-    return false
+    return null
   }
 
   private fun showTemplateConfigurable(factory: ConfigurationFactory) {
@@ -329,9 +338,13 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
     return userObject
   }
 
-  fun updateRightPanel(configurable: Configurable) {
+  fun updateRightPanel(configurable: Configurable?) {
     rightPanel.removeAll()
     selectedConfigurable = configurable
+    if (configurable == null) {
+      rightPanel.repaint()
+      return
+    }
 
     val configurableComponent = if (!project.isDefault && DumbService.getInstance(project).isDumb && !mayBeEditedInDumbMode(configurable)) {
       JBPanelWithEmptyText().withEmptyText(IdeBundle.message("empty.text.this.view.is.not.available.until.indices.are.built"))
@@ -409,10 +422,20 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
       changed = true
       update()
     }
+
+    info.addValidationListener {
+      val node = findNode(info.configuration) ?: return@addValidationListener
+      treeModel.nodeChanged(node)
+    }
   }
 
-  private fun drawPressAddButtonMessage(configurationType: ConfigurationType?) {
+  protected fun drawPressAddButtonMessage(configurationType: ConfigurationType?) {
     val panel = JPanel(BorderLayout())
+    if (!(configurationType is UnknownConfigurationType)) {
+      createTipPanelAboutAddingNewRunConfiguration(configurationType)?.let {
+        panel.add(it, BorderLayout.CENTER)
+      }
+    }
     if (configurationType == null) {
       val wrapper = JPanel(BorderLayout())
       if (project.isDefault || !DumbService.isDumb(project)) {
@@ -427,10 +450,6 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
         val settingsWrapper = JPanel(BorderLayout())
         settingsWrapper.add(settingsPanel, BorderLayout.WEST)
         settingsWrapper.add(Box.createGlue(), BorderLayout.CENTER)
-
-        wrapper.add(runDashboardTypesPanel, BorderLayout.CENTER)
-        runDashboardTypesPanel.addChangeListener(this::defaultsSettingsChanged)
-        runDashboardTypesPanel.border = JBUI.Borders.empty(0, 0, 20, 0)
         wrapper.add(settingsWrapper, BorderLayout.SOUTH)
       }
 
@@ -443,6 +462,8 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
     rightPanel.repaint()
   }
 
+  protected open fun createTipPanelAboutAddingNewRunConfiguration(configurationType: ConfigurationType?): JComponent? = null
+
   protected open fun createLeftPanel(): JComponent {
     initTree()
     return ScrollPaneFactory.createScrollPane(tree)
@@ -451,8 +472,7 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
   private fun defaultsSettingsChanged() {
     isModified = recentsLimit.text != recentsLimit.getClientProperty(INITIAL_VALUE_KEY) ||
                  confirmation.isSelected != confirmation.getClientProperty(INITIAL_VALUE_KEY) ||
-                 confirmationDeletionFromPopup.isSelected != confirmationDeletionFromPopup.getClientProperty(INITIAL_VALUE_KEY) ||
-                 runDashboardTypesPanel.isModified()
+                 confirmationDeletionFromPopup.isSelected != confirmationDeletionFromPopup.getClientProperty(INITIAL_VALUE_KEY)
   }
 
   private fun createSettingsPanel(): JPanel {
@@ -532,8 +552,6 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
     confirmationDeletionFromPopup.isSelected = config.isDeletionFromPopupRequiresConfirmation
     confirmationDeletionFromPopup.putClientProperty(INITIAL_VALUE_KEY, confirmationDeletionFromPopup.isSelected)
 
-    runDashboardTypesPanel.reset()
-
     for (each in additionalSettings) {
       each.first.reset()
     }
@@ -573,8 +591,6 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
       confirmation.putClientProperty(INITIAL_VALUE_KEY, confirmation.isSelected)
       manager.config.isDeletionFromPopupRequiresConfirmation = confirmationDeletionFromPopup.isSelected
       confirmationDeletionFromPopup.putClientProperty(INITIAL_VALUE_KEY, confirmationDeletionFromPopup.isSelected)
-
-      runDashboardTypesPanel.apply()
       additionalSettings.forEach { it.first.apply() }
 
       manager.setOrder(Comparator.comparingInt(ToIntFunction { settingsToOrder.getInt(it) }), isApplyAdditionalSortByTypeAndGroup = false)
@@ -924,6 +940,7 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
     configuration.name = createUniqueName(typeNode, suggestName(configuration), CONFIGURATION, TEMPORARY_CONFIGURATION)
     (configuration as? LocatableConfigurationBase<*>)?.setNameChangedByUser(false)
     callNewConfigurationCreated(factory, configuration)
+    RunConfigurationOptionUsagesCollector.logAddNew(project, factory.type.id)
     return createNewConfiguration(settings, node, selectedNode)
   }
 
@@ -954,7 +971,7 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
       showAddPopup(true, null)
     }
 
-    fun showAddPopup(showApplicableTypesOnly: Boolean, component: JComponent?) {
+    fun showAddPopup(showApplicableTypesOnly: Boolean, clickEvent: MouseEvent?) {
       if (showApplicableTypesOnly && myPopupState.isRecentlyHidden) return // do not show new popup
       val allTypes = ConfigurationType.CONFIGURATION_TYPE_EP.extensionList
       val configurationTypes: MutableList<ConfigurationType?> = configurationTypeSorted(project, showApplicableTypesOnly, allTypes, true).toMutableList()
@@ -970,8 +987,8 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
                                                           { showAddPopup(false, null) }, true)
       //new TreeSpeedSearch(myTree);
       myPopupState.prepareToShow(popup)
-      if (component == null) popup.showUnderneathOf(toolbarDecorator!!.actionsPanel)
-      else popup.showInBestPositionFor(DataManager.getInstance().getDataContext(component))
+      if (clickEvent == null) popup.showUnderneathOf(toolbarDecorator!!.actionsPanel)
+      else popup.show(RelativePoint(clickEvent))
     }
   }
 
@@ -1008,7 +1025,9 @@ open class RunConfigurable @JvmOverloads constructor(protected val project: Proj
           continue
 
         if (node.userObject is SingleConfigurationConfigurable<*>) {
-          (node.userObject as SingleConfigurationConfigurable<*>).disposeUIResources()
+          val configurable = node.userObject as SingleConfigurationConfigurable<*>
+          RunConfigurationOptionUsagesCollector.logRemove(project, configurable.configuration.type.id)
+          configurable.disposeUIResources()
         }
 
         nodeIndexToSelect = parent.getIndex(node)

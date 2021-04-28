@@ -12,7 +12,6 @@ import java.util.Set;
 /**
  * Possible places in the IDE user interface where an action can appear.
  */
-@SuppressWarnings("HardCodedStringLiteral")
 public abstract class ActionPlaces {
   public static final String UNKNOWN = "unknown";
   public static final String TOOLBAR = "toolbar";
@@ -75,6 +74,7 @@ public abstract class ActionPlaces {
   public static final String NAVIGATION_BAR_TOOLBAR = "NavBarToolbar";
   public static final String STATE_WIDGET_ACTION_BAR = "StateWidgetActionBar";
   public static final String NEW_TOOLBAR = "NewToolbar";
+  public static final String TOOLBAR_DECORATOR_TOOLBAR = "ToolbarDecorator";
 
   public static final String TODO_VIEW_POPUP = "TodoViewPopup";
   public static final String TODO_VIEW_TOOLBAR = "TodoViewToolbar";
@@ -185,13 +185,13 @@ public abstract class ActionPlaces {
   );
 
   private static final Set<String> ourPopupPlaces = ContainerUtil.newHashSet(
-    POPUP, EDITOR_POPUP, EDITOR_TAB_POPUP, COMMANDER_POPUP,
+    POPUP, EDITOR_POPUP, EDITOR_TAB_POPUP, QUICK_SWITCH_SCHEME_POPUP, COMMANDER_POPUP, INTENTION_MENU,
     PROJECT_VIEW_POPUP, FAVORITES_VIEW_POPUP, SCOPE_VIEW_POPUP, TESTTREE_VIEW_POPUP, TESTSTATISTICS_VIEW_POPUP, TYPE_HIERARCHY_VIEW_POPUP,
     METHOD_HIERARCHY_VIEW_POPUP, CALL_HIERARCHY_VIEW_POPUP, J2EE_ATTRIBUTES_VIEW_POPUP, J2EE_VIEW_POPUP, USAGE_VIEW_POPUP,
     STRUCTURE_VIEW_POPUP, TODO_VIEW_POPUP, COMPILER_MESSAGES_POPUP, ANT_MESSAGES_POPUP, ANT_EXPLORER_POPUP, UPDATE_POPUP,
     FILEVIEW_POPUP, CHECKOUT_POPUP, LVCS_DIRECTORY_HISTORY_POPUP, GUI_DESIGNER_EDITOR_POPUP, GUI_DESIGNER_COMPONENT_TREE_POPUP,
     GUI_DESIGNER_PROPERTY_INSPECTOR_POPUP, TOOLWINDOW_POPUP,
-    ACTION_PLACE_QUICK_LIST_POPUP_ACTION, ACTION_PLACE_QUICK_LIST_POPUP_ACTION,
+    ACTION_PLACE_QUICK_LIST_POPUP_ACTION, ACTION_PLACE_QUICK_LIST_POPUP_ACTION, REFACTORING_QUICKLIST,
     CREATE_EJB_POPUP, CHANGES_VIEW_POPUP, DATABASE_VIEW_POPUP, REMOTE_HOST_VIEW_POPUP, REMOTE_HOST_DIALOG_POPUP, TFS_TREE_POPUP,
     ACTION_PLACE_VCS_QUICK_LIST_POPUP_ACTION, PHING_EXPLORER_POPUP, NAVIGATION_BAR_POPUP, JS_BUILD_TOOL_POPUP,
     V8_CPU_PROFILING_POPUP, V8_HEAP_PROFILING_POPUP, V8_HEAP_PROFILING_POPUP, RUN_DASHBOARD_POPUP, SERVICES_POPUP, EDITOR_GUTTER_POPUP
@@ -211,9 +211,12 @@ public abstract class ActionPlaces {
     return MAIN_MENU.equals(place) || KEYBOARD_SHORTCUT.equals(place);
   }
 
-  @NotNull
-  public static String getActionGroupPopupPlace(@Nullable String actionId) {
+  public static @NotNull String getActionGroupPopupPlace(@Nullable String actionId) {
     return actionId == null ? POPUP : POPUP_PREFIX + actionId;
+  }
+
+  public static @NotNull String getPopupPlace(@Nullable String place) {
+    return place == null ? POPUP : isPopupPlace(place) ? place : POPUP_PREFIX + place;
   }
 
   /**

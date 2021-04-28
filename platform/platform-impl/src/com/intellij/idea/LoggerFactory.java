@@ -20,21 +20,26 @@ import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 public final class LoggerFactory implements Logger.Factory {
   private static final String SYSTEM_MACRO = "$SYSTEM_DIR$";
   private static final String APPLICATION_MACRO = "$APPLICATION_DIR$";
   private static final String LOG_DIR_MACRO = "$LOG_DIR$";
 
+  public static final String LOG_FILE_NAME = "idea.log";
+
+  public static @NotNull Path getLogFilePath() {
+    return Path.of(PathManager.getLogPath(), LOG_FILE_NAME);
+  }
+
   LoggerFactory() throws Exception {
     System.setProperty("log4j.defaultInitOverride", "true");
 
     String configPath = System.getProperty(PathManager.PROPERTY_LOG_CONFIG_FILE);
     if (configPath != null) {
-      Path configFile = Paths.get(configPath);
+      Path configFile = Path.of(configPath);
       if (!configFile.isAbsolute()) {
-        configFile = Paths.get(PathManager.getBinPath()).resolve(configPath);  // look from the 'bin/' directory where log.xml was used to be
+        configFile = Path.of(PathManager.getBinPath()).resolve(configPath);  // look from the 'bin/' directory where log.xml was used to be
       }
       if (Files.exists(configFile)) {
         configureFromXmlFile(configFile);
@@ -51,7 +56,7 @@ public final class LoggerFactory implements Logger.Factory {
     return MutedErrorLogger.isEnabled() ? MutedErrorLogger.of(logger) : logger;
   }
 
-  private static void configureFromXmlFile(@NotNull Path xmlFile) throws Exception {
+  private static void configureFromXmlFile(Path xmlFile) throws Exception {
     String text = Files.readString(xmlFile);
     text = text.replace(SYSTEM_MACRO, PathManager.getSystemPath().replace("\\", "\\\\"));
     text = text.replace(APPLICATION_MACRO, PathManager.getHomePath().replace("\\", "\\\\"));
@@ -87,11 +92,11 @@ public final class LoggerFactory implements Logger.Factory {
 
     PatternLayout layout = new PatternLayout("%d [%7r] %6p - %30.30c - %m \n");
 
-    RollingFileAppender ideaLog = new RollingFileAppender(layout, PathManager.getLogPath() + "/idea.log", true) {
+    RollingFileAppender ideaLog = new RollingFileAppender(layout, getLogFilePath().toString(), true) {
       @Override
       public void rollOver() {
         super.rollOver();
-        MutedLogger.dropCaches();
+        MutedErrorLogger.dropCaches();
       }
     };
     ideaLog.setEncoding(StandardCharsets.UTF_8.name());

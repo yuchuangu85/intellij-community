@@ -25,6 +25,7 @@ import com.siyeh.ig.psiutils.*;
 import org.jetbrains.annotations.*;
 
 import javax.swing.*;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -466,7 +467,17 @@ public class RedundantStringOperationInspection extends AbstractBaseJavaLocalIns
       PsiExpression[] args = call.getArgumentList().getExpressions();
       PsiExpression stringExpression = call.getMethodExpression().getQualifierExpression();
       if (args.length == 1) {
-        return ExpressionUtils.isZero(args[0]) ? getProblem(call, "inspection.redundant.string.call.message") : null;
+        if (ExpressionUtils.isZero(args[0])) {
+          return getProblem(call, "inspection.redundant.string.call.message");
+        } else if (isLengthOf(args[0], stringExpression)) {
+          SubstringToEmptyStringFix fix = new SubstringToEmptyStringFix();
+
+          return myManager.createProblemDescriptor(call,
+                                                   InspectionGadgetsBundle.message("inspection.redundant.string.constructor.message"),
+                                                   fix,
+                                                   ProblemHighlightType.GENERIC_ERROR_OR_WARNING, myIsOnTheFly);
+        }
+        return null;
       }
       // args.length == 2
       if (isLengthOf(args[1], stringExpression)) {
@@ -944,6 +955,28 @@ public class RedundantStringOperationInspection extends AbstractBaseJavaLocalIns
       if (parent != null) ct.delete(parent);
 
       ct.replaceAndRestoreComments(expression, newText);
+    }
+  }
+
+  private static final class SubstringToEmptyStringFix extends InspectionGadgetsFix {
+
+    @Override
+    @NotNull
+    public String getName() {
+      return InspectionGadgetsBundle.message("inspection.redundant.string.replace.with.empty.fix.name");
+    }
+
+    @NotNull
+    @Override
+    public String getFamilyName() {
+      return getName();
+    }
+
+    @Override
+    public void doFix(Project project, ProblemDescriptor descriptor) {
+      final PsiMethodCallExpression expression = tryCast(descriptor.getPsiElement(), PsiMethodCallExpression.class);
+      if (expression == null) return;
+      new CommentTracker().replaceAndRestoreComments(expression, "\"\"");
     }
   }
 }

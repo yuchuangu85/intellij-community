@@ -1,13 +1,13 @@
 package com.jetbrains.packagesearch.intellij.plugin.extensibility
 
-import com.intellij.openapi.extensions.ExtensionPointName
-import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.PsiFile
 import com.intellij.buildsystem.model.OperationFailure
 import com.intellij.buildsystem.model.OperationItem
 import com.intellij.buildsystem.model.unified.UnifiedDependency
 import com.intellij.buildsystem.model.unified.UnifiedDependencyRepository
+import com.intellij.openapi.extensions.ExtensionPointName
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.PsiFile
 
 interface ProjectModuleOperationProvider {
 
@@ -29,13 +29,19 @@ interface ProjectModuleOperationProvider {
 
     fun hasSupportFor(projectModuleType: ProjectModuleType): Boolean
 
-    fun addDependenciesToProject(
+    fun addDependencyToProject(
         operationMetadata: DependencyOperationMetadata,
         project: Project,
         virtualFile: VirtualFile
     ): List<OperationFailure<out OperationItem>>
 
-    fun removeDependenciesFromProject(
+    fun removeDependencyFromProject(
+        operationMetadata: DependencyOperationMetadata,
+        project: Project,
+        virtualFile: VirtualFile
+    ): List<OperationFailure<out OperationItem>>
+
+    fun updateDependencyInProject(
         operationMetadata: DependencyOperationMetadata,
         project: Project,
         virtualFile: VirtualFile
@@ -46,7 +52,13 @@ interface ProjectModuleOperationProvider {
         virtualFile: VirtualFile
     ): Collection<UnifiedDependency>
 
-    fun addRepositoriesToProject(
+    fun addRepositoryToProject(
+        repository: UnifiedDependencyRepository,
+        project: Project,
+        virtualFile: VirtualFile
+    ): List<OperationFailure<out OperationItem>>
+
+    fun removeRepositoryFromProject(
         repository: UnifiedDependencyRepository,
         project: Project,
         virtualFile: VirtualFile

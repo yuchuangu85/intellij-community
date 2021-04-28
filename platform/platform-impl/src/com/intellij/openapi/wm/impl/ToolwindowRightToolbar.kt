@@ -20,17 +20,22 @@ class ToolwindowRightToolbar : ToolwindowToolbar() {
 
   override fun removeStripeButton(project: Project, toolWindow: ToolWindow, anchor: ToolWindowAnchor) {
     if (anchor == ToolWindowAnchor.RIGHT) {
-      topPane.components.find { (it as SquareStripeButton).button.id == toolWindow.id }?.let { topPane.remove(it) }
+      remove(topPane, toolWindow)
     }
   }
 
-  override fun addStripeButton(project: Project, anchor: ToolWindowAnchor, comparator: Comparator<ToolWindow>, toolWindow: ToolWindow) {
+  override fun addStripeButton(project: Project, anchor: ToolWindowAnchor, toolWindow: ToolWindow) {
     if (anchor == ToolWindowAnchor.RIGHT) {
-      rebuildStripe(project, topPane, toolWindow, comparator)
+      rebuildStripe(project, topPane, toolWindow)
     }
+  }
+
+  override fun reset() {
+    topPane.removeAll()
+    topPane.revalidate()
   }
 
   override fun getButtonFor(toolWindowId: String): SquareStripeButton? {
-    return topPane.components.filterIsInstance(SquareStripeButton::class.java).find {it.button.id === toolWindowId}
+    return topPane.components.filterIsInstance(SquareStripeButton::class.java).find {it.button.id == toolWindowId}
   }
 }

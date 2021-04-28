@@ -11,6 +11,7 @@ import com.intellij.openapi.util.Iconable;
 import com.intellij.openapi.util.NotNullLazyValue;
 import com.intellij.openapi.util.SystemInfoRt;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileWithoutContent;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.ui.DeferredIconImpl;
@@ -57,8 +58,13 @@ public final class NativeIconProvider extends IconProvider implements DumbAware 
       return null;
     }
 
+    if (virtualFile instanceof VirtualFileWithoutContent) {
+      return null;
+    }
+
     Ext ext = getExtension(virtualFile, flags);
-    Path ioFile = virtualFile.toNioPath();
+    Path ioFile = virtualFile.getFileSystem().getNioPath(virtualFile);
+    if (ioFile == null) return null;
 
     synchronized (myIconCache) {
       Icon icon;
@@ -79,7 +85,7 @@ public final class NativeIconProvider extends IconProvider implements DumbAware 
       }
 
       // we should have no read access here, to avoid deadlock with EDT needed to init component
-      assert !ApplicationManager.getApplication().isReadAccessAllowed();
+      if (ApplicationManager.getApplication().isReadAccessAllowed()) return null;
 
       Icon icon;
       try {

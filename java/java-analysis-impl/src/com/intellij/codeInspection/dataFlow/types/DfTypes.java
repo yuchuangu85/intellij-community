@@ -2,12 +2,17 @@
 package com.intellij.codeInspection.dataFlow.types;
 
 import com.intellij.codeInsight.Nullability;
-import com.intellij.codeInspection.dataFlow.*;
+import com.intellij.codeInspection.dataFlow.DfaNullability;
+import com.intellij.codeInspection.dataFlow.Mutability;
+import com.intellij.codeInspection.dataFlow.TypeConstraint;
+import com.intellij.codeInspection.dataFlow.TypeConstraints;
+import com.intellij.codeInspection.dataFlow.jvm.JvmPsiRangeSetUtil;
+import com.intellij.codeInspection.dataFlow.jvm.JvmSpecialField;
 import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeSet;
 import com.intellij.psi.PsiKeyword;
 import com.intellij.psi.PsiPrimitiveType;
 import com.intellij.psi.PsiType;
-import com.intellij.util.ObjectUtils;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -21,111 +26,6 @@ public final class DfTypes {
   private DfTypes() {}
 
   /**
-   * A type that contains every possible value supported by the type system
-   */
-  public static final DfType TOP = new DfType() {
-    @Override
-    public boolean isSuperType(@NotNull DfType other) {
-      return true;
-    }
-
-    @NotNull
-    @Override
-    public DfType join(@NotNull DfType other) {
-      return this;
-    }
-
-    @NotNull
-    @Override
-    public DfType meet(@NotNull DfType other) {
-      return other;
-    }
-
-    @NotNull
-    @Override
-    public DfType tryNegate() {
-      return BOTTOM;
-    }
-
-    @Override
-    public int hashCode() {
-      return 1254215;
-    }
-
-    @Override
-    public String toString() {
-      return "TOP";
-    }
-  };
-
-  /**
-   * A type that contains no values
-   */
-  public static final DfType BOTTOM = new DfType() {
-    @Override
-    public boolean isSuperType(@NotNull DfType other) {
-      return other == this;
-    }
-
-    @NotNull
-    @Override
-    public DfType join(@NotNull DfType other) {
-      return other;
-    }
-
-    @NotNull
-    @Override
-    public DfType meet(@NotNull DfType other) {
-      return this;
-    }
-
-    @NotNull
-    @Override
-    public DfType tryNegate() {
-      return TOP;
-    }
-
-    @Override
-    public int hashCode() {
-      return 67532141;
-    }
-
-    @Override
-    public String toString() {
-      return "BOTTOM";
-    }
-  };
-
-  /**
-   * A special value that represents a contract failure after method return (the control flow should immediately proceed
-   * with exception handling). This value is like a constant but it's type doesn't correspond to any JVM type.
-   */
-  public static final DfType FAIL = new DfConstantType<>(ObjectUtils.sentinel("FAIL")) {
-    @NotNull
-    @Override
-    public PsiType getPsiType() {
-      return PsiType.VOID;
-    }
-
-    @NotNull
-    @Override
-    public DfType join(@NotNull DfType other) {
-      return other == this ? this : TOP;
-    }
-
-    @NotNull
-    @Override
-    public DfType meet(@NotNull DfType other) {
-      return other == this ? this : BOTTOM;
-    }
-
-    @Override
-    public int hashCode() {
-      return 5362412;
-    }
-  };
-
-  /**
    * A type that corresponds to JVM boolean type. Contains two values: true and false
    */
   public static final DfBooleanType BOOLEAN = new DfBooleanType() {
@@ -134,24 +34,21 @@ public final class DfTypes {
       return other == BOTTOM || other instanceof DfBooleanType;
     }
 
-    @NotNull
     @Override
-    public DfType join(@NotNull DfType other) {
+    public @NotNull DfType join(@NotNull DfType other) {
       if (other instanceof DfBooleanType) return this;
       return TOP;
     }
 
-    @NotNull
     @Override
-    public DfType meet(@NotNull DfType other) {
+    public @NotNull DfType meet(@NotNull DfType other) {
       if (other == TOP) return this;
       if (other instanceof DfBooleanType) return other;
       return BOTTOM;
     }
 
-    @NotNull
     @Override
-    public DfType tryNegate() {
+    public @NotNull DfType tryNegate() {
       return BOTTOM;
     }
 
@@ -161,7 +58,7 @@ public final class DfTypes {
     }
 
     @Override
-    public String toString() {
+    public @NotNull String toString() {
       return PsiKeyword.BOOLEAN;
     }
   };
@@ -180,23 +77,23 @@ public final class DfTypes {
    * @param value boolean value
    * @return a boolean constant having given value
    */
-  public static DfBooleanConstantType booleanValue(boolean value) {
+  @Contract(pure = true)
+  public static @NotNull DfBooleanConstantType booleanValue(boolean value) {
     return value ? TRUE : FALSE;
   }
 
   /**
    * A type that corresponds to JVM int type
    */
-  public static final DfIntType INT = new DfIntRangeType(Objects.requireNonNull(LongRangeSet.fromType(PsiType.INT)), null);
+  public static final DfIntType INT = new DfIntRangeType(Objects.requireNonNull(JvmPsiRangeSetUtil.typeRange(PsiType.INT)), null);
 
   /**
    * Creates a type that represents a subset of int values, clamping values not representable in the JVM int type.
    *
    * @param range range of values. Values that cannot be represented in JVM int type are removed from this range upon creation.
-   * @return resulting type. Might be {@link #BOTTOM} if range is empty or all its values are out of the int domain.
+   * @return resulting type. Might be {@link DfType#BOTTOM} if range is empty or all its values are out of the int domain.
    */
-  @NotNull
-  public static DfType intRangeClamped(LongRangeSet range) {
+  public static @NotNull DfType intRangeClamped(LongRangeSet range) {
     return intRange(range.intersect(DfIntRangeType.FULL_RANGE));
   }
 
@@ -204,13 +101,12 @@ public final class DfTypes {
    * Creates a type that represents a subset of int values.
    *
    * @param range range of values.
-   * @return resulting type. Might be {@link #BOTTOM} if range is empty.
+   * @return resulting type. Might be {@link DfType#BOTTOM} if range is empty.
    * @throws IllegalArgumentException if range contains values not representable in the JVM int type.
    */
-  @NotNull
-  public static DfType intRange(LongRangeSet range) {
+  public static @NotNull DfType intRange(LongRangeSet range) {
     if (range.equals(DfIntRangeType.FULL_RANGE)) return INT;
-    if (range.isEmpty()) return BOTTOM;
+    if (range.isEmpty()) return DfType.BOTTOM;
     Long value = range.getConstantValue();
     if (value != null) {
       return intValue(Math.toIntExact(value));
@@ -221,7 +117,7 @@ public final class DfTypes {
   static @NotNull DfType intRange(@NotNull LongRangeSet range, @Nullable LongRangeSet wideRange) {
     if (wideRange == null || wideRange.equals(range) || wideRange.isEmpty()) return intRange(range);
     if (range.isEmpty()) {
-      return BOTTOM;
+      return DfType.BOTTOM;
     }
     Long value = range.getConstantValue();
     if (value != null) {
@@ -234,8 +130,7 @@ public final class DfTypes {
    * @param value int value
    * @return a int constant type that contains a given value
    */
-  @NotNull
-  public static DfIntConstantType intValue(int value) {
+  public static @NotNull DfIntConstantType intValue(int value) {
     return new DfIntConstantType(value, null);
   }
 
@@ -248,12 +143,11 @@ public final class DfTypes {
    * Creates a type that represents a subset of long values.
    *
    * @param range range of values.
-   * @return resulting type. Might be {@link #BOTTOM} if range is empty.
+   * @return resulting type. Might be {@link DfType#BOTTOM} if range is empty.
    */
-  @NotNull
-  public static DfType longRange(LongRangeSet range) {
+  public static @NotNull DfType longRange(LongRangeSet range) {
     if (range.equals(LongRangeSet.all())) return LONG;
-    if (range.isEmpty()) return BOTTOM;
+    if (range.isEmpty()) return DfType.BOTTOM;
     Long value = range.getConstantValue();
     if (value != null) {
       return longValue(value);
@@ -264,7 +158,7 @@ public final class DfTypes {
   static @NotNull DfType longRange(@NotNull LongRangeSet range, @Nullable LongRangeSet wideRange) {
     if (wideRange == null || wideRange.equals(range) || wideRange.isEmpty()) return longRange(range);
     if (range.isEmpty()) {
-      return BOTTOM;
+      return DfType.BOTTOM;
     }
     Long value = range.getConstantValue();
     if (value != null) {
@@ -277,8 +171,7 @@ public final class DfTypes {
    * @param value long value
    * @return a long constant type that contains a given value
    */
-  @NotNull
-  public static DfLongConstantType longValue(long value) {
+  public static @NotNull DfLongConstantType longValue(long value) {
     return new DfLongConstantType(value, null);
   }
 
@@ -288,8 +181,7 @@ public final class DfTypes {
    * @param isLong whether int or long type should be created
    * @return resulting type.
    */
-  @NotNull
-  public static DfType rangeClamped(LongRangeSet range, boolean isLong) {
+  public static @NotNull DfType rangeClamped(LongRangeSet range, boolean isLong) {
     return isLong ? longRange(range) : intRangeClamped(range);
   }
 
@@ -302,24 +194,21 @@ public final class DfTypes {
       return other == BOTTOM || other instanceof DfFloatType;
     }
 
-    @NotNull
     @Override
-    public DfType join(@NotNull DfType other) {
+    public @NotNull DfType join(@NotNull DfType other) {
       if (other instanceof DfFloatType) return this;
       return TOP;
     }
 
-    @NotNull
     @Override
-    public DfType meet(@NotNull DfType other) {
+    public @NotNull DfType meet(@NotNull DfType other) {
       if (other == TOP) return this;
       if (other instanceof DfFloatType) return other;
       return BOTTOM;
     }
 
-    @NotNull
     @Override
-    public DfType tryNegate() {
+    public @NotNull DfType tryNegate() {
       return BOTTOM;
     }
 
@@ -329,8 +218,46 @@ public final class DfTypes {
     }
 
     @Override
-    public String toString() {
+    public @NotNull String toString() {
       return PsiKeyword.FLOAT;
+    }
+  };
+  /**
+   * Represents +0.0f and -0.0f at the same time
+   */
+  public static final DfFloatType FLOAT_ZERO = new DfFloatType() {
+    @Override
+    public boolean isSuperType(@NotNull DfType other) {
+      if (other == BOTTOM || other == this) return true;
+      Float constant = other.getConstantOfType(Float.class);
+      return constant != null && constant == 0.0f;
+    }
+
+    @Override
+    public @NotNull DfType join(@NotNull DfType other) {
+      if (isSuperType(other)) return this;
+      if (other.isSuperType(this)) return other;
+      if (other instanceof DfFloatNotValueType) return other.join(this);
+      if (other instanceof DfFloatType) return FLOAT;
+      return TOP;
+    }
+
+    @Override
+    public @NotNull DfType meet(@NotNull DfType other) {
+      if (isSuperType(other)) return other;
+      if (other.isSuperType(this)) return this;
+      if (other instanceof DfFloatNotValueType) return other.meet(this);
+      return BOTTOM;
+    }
+
+    @Override
+    public @NotNull DfType tryNegate() {
+      return new DfFloatNotValueType(FLOAT_ZERO_SET);
+    }
+
+    @Override
+    public @NotNull String toString() {
+      return "\u00B10.0f";
     }
   };
 
@@ -351,24 +278,21 @@ public final class DfTypes {
       return other == BOTTOM || other instanceof DfDoubleType;
     }
 
-    @NotNull
     @Override
-    public DfType join(@NotNull DfType other) {
+    public @NotNull DfType join(@NotNull DfType other) {
       if (other instanceof DfDoubleType) return this;
       return TOP;
     }
 
-    @NotNull
     @Override
-    public DfType meet(@NotNull DfType other) {
+    public @NotNull DfType meet(@NotNull DfType other) {
       if (other == TOP) return this;
       if (other instanceof DfDoubleType) return other;
       return BOTTOM;
     }
 
-    @NotNull
     @Override
-    public DfType tryNegate() {
+    public @NotNull DfType tryNegate() {
       return BOTTOM;
     }
 
@@ -378,8 +302,46 @@ public final class DfTypes {
     }
 
     @Override
-    public String toString() {
+    public @NotNull String toString() {
       return PsiKeyword.DOUBLE;
+    }
+  };
+  /**
+   * Represents +0.0 and -0.0 at the same time
+   */
+  public static final DfDoubleType DOUBLE_ZERO = new DfDoubleType() {
+    @Override
+    public boolean isSuperType(@NotNull DfType other) {
+      if (other == BOTTOM || other == this) return true;
+      Double constant = other.getConstantOfType(Double.class);
+      return constant != null && constant == 0.0;
+    }
+
+    @Override
+    public @NotNull DfType join(@NotNull DfType other) {
+      if (isSuperType(other)) return this;
+      if (other.isSuperType(this)) return other;
+      if (other instanceof DfDoubleNotValueType) return other.join(this);
+      if (other instanceof DfDoubleType) return DOUBLE;
+      return TOP;
+    }
+
+    @Override
+    public @NotNull DfType meet(@NotNull DfType other) {
+      if (isSuperType(other)) return other;
+      if (other.isSuperType(this)) return this;
+      if (other instanceof DfDoubleNotValueType) return other.meet(this);
+      return BOTTOM;
+    }
+
+    @Override
+    public @NotNull DfType tryNegate() {
+      return new DfDoubleNotValueType(DfDoubleType.DOUBLE_ZERO_SET);
+    }
+
+    @Override
+    public @NotNull String toString() {
+      return "\u00B10.0";
     }
   };
 
@@ -400,33 +362,87 @@ public final class DfTypes {
    * A reference type that contains any reference except null
    */
   public static final DfReferenceType NOT_NULL_OBJECT =
-    customObject(TypeConstraints.TOP, DfaNullability.NOT_NULL, Mutability.UNKNOWN, null, BOTTOM);
+    customObject(TypeConstraints.TOP, DfaNullability.NOT_NULL, Mutability.UNKNOWN, null, DfType.BOTTOM);
 
   /**
    * A reference type that contains any reference or null
    */
   public static final DfReferenceType OBJECT_OR_NULL =
-    customObject(TypeConstraints.TOP, DfaNullability.UNKNOWN, Mutability.UNKNOWN, null, BOTTOM);
+    customObject(TypeConstraints.TOP, DfaNullability.UNKNOWN, Mutability.UNKNOWN, null, DfType.BOTTOM);
 
   /**
    * A reference type that contains any reference to a local object
    */
   public static final DfReferenceType LOCAL_OBJECT =
     new DfGenericObjectType(Set.of(), TypeConstraints.TOP, DfaNullability.NOT_NULL, Mutability.UNKNOWN,
-                            null, BOTTOM, true);
+                            null, DfType.BOTTOM, true);
 
   /**
    * Returns a custom constant type
+   *
+   * The following types of the objects are supported:
+   * <ul>
+   *   <li>Integer/Long/Double/Float/Boolean (will be unboxed)</li>
+   *   <li>Character/Byte/Short (will be unboxed and widened to int)</li>
+   *   <li>String</li>
+   *   <li>{@link com.intellij.psi.PsiEnumConstant} (enum constant value, type must be the corresponding enum type)</li>
+   *   <li>{@link com.intellij.psi.PsiField} (a final field that contains a unique value, type must be a type of that field)</li>
+   *   <li>{@link PsiType} (java.lang.Class object value, type must be java.lang.Class)</li>
+   * </ul>
    *
    * @param constant constant value
    * @param type value type
    * @return a constant type that contains only given constant
    */
-  @NotNull
-  public static DfConstantType<?> constant(@Nullable Object constant, @NotNull PsiType type) {
-    if (constant == null) {
-      return NULL;
+  public static @NotNull DfConstantType<?> constant(@Nullable Object constant, @NotNull PsiType type) {
+    if (constant == null) return NULL;
+    DfConstantType<?> primitiveConstant = primitiveConstantImpl(constant);
+    if (primitiveConstant != null) return primitiveConstant;
+    return referenceConstant(constant, type);
+  }
+
+  /**
+   * Returns a custom constant type
+   *
+   * @param constant constant value
+   * @param type a pattern DfType: the constant must be a sub-type of this type
+   * @return a constant type that contains only given constant
+   */
+  public static @NotNull DfConstantType<?> constant(@Nullable Object constant, @NotNull DfType type) {
+    if (constant == null) return NULL;
+    DfConstantType<?> primitiveConstant = primitiveConstantImpl(constant);
+    if (primitiveConstant != null) return primitiveConstant;
+    if (!(type instanceof DfReferenceType)) throw new IllegalArgumentException("Not reference type: " + type + "; constant: " + constant);
+    return new DfReferenceConstantType(constant, ((DfReferenceType)type).getConstraint(), false);
+  }
+
+  /**
+   * Returns a non-primitive constant
+   *
+   * @param constant constant value
+   * @param type value type
+   * @return a constant type that contains only given constant
+   */
+  public static @NotNull DfConstantType<?> referenceConstant(@NotNull Object constant, @NotNull PsiType type) {
+    return new DfReferenceConstantType(constant, TypeConstraints.instanceOf(type), false);
+  }
+
+  /**
+   * Returns a primitive constant
+   *
+   * @param constant constant value
+   * @return a constant type that contains only given constant
+   * @throws IllegalArgumentException if the supplied constant is not supported primitive constant value
+   */
+  public static @NotNull DfConstantType<?> primitiveConstant(@NotNull Object constant) {
+    DfConstantType<?> res = primitiveConstantImpl(constant);
+    if (res == null) {
+      throw new IllegalArgumentException("Invalid value supplied: " + constant + "(type: " + constant.getClass() + ")");
     }
+    return res;
+  }
+
+  private static @Nullable DfConstantType<?> primitiveConstantImpl(@NotNull Object constant) {
     if (constant instanceof Boolean) {
       return booleanValue((Boolean)constant);
     }
@@ -445,7 +461,7 @@ public final class DfTypes {
     if (constant instanceof Double) {
       return doubleValue((Double)constant);
     }
-    return new DfReferenceConstantType(constant, type, TypeConstraints.instanceOf(type), false);
+    return null;
   }
 
   /**
@@ -453,9 +469,8 @@ public final class DfTypes {
    * @param stringType string type
    * @return concatenation result string
    */
-  @NotNull
-  public static DfConstantType<?> concatenationResult(@NotNull String constant, @NotNull PsiType stringType) {
-    return new DfReferenceConstantType(constant, stringType, TypeConstraints.exact(stringType), true);
+  public static @NotNull DfConstantType<?> concatenationResult(@NotNull String constant, @NotNull PsiType stringType) {
+    return new DfReferenceConstantType(constant, TypeConstraints.exact(stringType), true);
   }
 
   /**
@@ -488,15 +503,14 @@ public final class DfTypes {
    * @param nullability nullability
    * @return a type that references given objects of given type (or it subtypes) and has given nullability
    */
-  @NotNull
-  public static DfType typedObject(@Nullable PsiType type, @NotNull Nullability nullability) {
-    if (type == null) return TOP;
+  public static @NotNull DfType typedObject(@Nullable PsiType type, @NotNull Nullability nullability) {
+    if (type == null) return DfType.TOP;
     if (type instanceof PsiPrimitiveType) {
-      if (type.equals(PsiType.VOID)) return TOP;
+      if (type.equals(PsiType.VOID)) return DfType.BOTTOM;
       if (type.equals(PsiType.BOOLEAN)) return BOOLEAN;
       if (type.equals(PsiType.INT)) return INT;
       if (type.equals(PsiType.CHAR) || type.equals(PsiType.SHORT) || type.equals(PsiType.BYTE)){
-        return intRange(Objects.requireNonNull(LongRangeSet.fromType(type)));
+        return intRange(Objects.requireNonNull(JvmPsiRangeSetUtil.typeRange(type)));
       }
       if (type.equals(PsiType.LONG)) return LONG;
       if (type.equals(PsiType.DOUBLE)) return DOUBLE;
@@ -505,10 +519,10 @@ public final class DfTypes {
     }
     TypeConstraint constraint = TypeConstraints.instanceOf(type);
     if (constraint == TypeConstraints.BOTTOM) {
-      return nullability == Nullability.NOT_NULL ? BOTTOM : NULL;
+      return nullability == Nullability.NOT_NULL ? DfType.BOTTOM : NULL;
     }
     return new DfGenericObjectType(Set.of(), constraint,
-                                   DfaNullability.fromNullability(nullability), Mutability.UNKNOWN, null, BOTTOM, false);
+                                   DfaNullability.fromNullability(nullability), Mutability.UNKNOWN, null, DfType.BOTTOM, false);
   }
 
   /**
@@ -525,18 +539,18 @@ public final class DfTypes {
    * @param constraint type constraint
    * @param nullability nullability, must not be {@link DfaNullability#NULL}
    * @param mutability mutability desired mutability
-   * @param specialField special field
+   * @param jvmSpecialField special field
    * @param sfType type of special field
    * @return a reference type object
    */
   public static DfReferenceType customObject(@NotNull TypeConstraint constraint,
                                              @NotNull DfaNullability nullability,
                                              @NotNull Mutability mutability,
-                                             @Nullable SpecialField specialField,
+                                             @Nullable JvmSpecialField jvmSpecialField,
                                              @NotNull DfType sfType) {
     if (nullability == DfaNullability.NULL) {
       throw new IllegalArgumentException();
     }
-    return new DfGenericObjectType(Set.of(), constraint, nullability, mutability, specialField, sfType, false);
+    return new DfGenericObjectType(Set.of(), constraint, nullability, mutability, jvmSpecialField, sfType, false);
   }
 }

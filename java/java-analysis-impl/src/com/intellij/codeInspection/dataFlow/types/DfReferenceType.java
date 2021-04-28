@@ -1,12 +1,14 @@
 // Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.dataFlow.types;
 
-import com.intellij.codeInspection.dataFlow.*;
+import com.intellij.codeInspection.dataFlow.DfaNullability;
+import com.intellij.codeInspection.dataFlow.Mutability;
+import com.intellij.codeInspection.dataFlow.TypeConstraint;
+import com.intellij.codeInspection.dataFlow.TypeConstraints;
+import com.intellij.codeInspection.dataFlow.jvm.JvmSpecialField;
 import com.intellij.openapi.util.NlsSafe;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import static com.intellij.codeInspection.dataFlow.types.DfTypes.BOTTOM;
 
 /**
  * Type that corresponds to JVM reference type; represents subset of possible reference values (may include null)
@@ -43,12 +45,12 @@ public interface DfReferenceType extends DfType {
    * @return special field if additional information is known about the special field of all referenced objects
    */
   @Nullable
-  default SpecialField getSpecialField() {
+  default JvmSpecialField getSpecialField() {
     return null;
   }
 
   /**
-   * @return type of special field; {@link DfTypes#BOTTOM} if {@link #getSpecialField()} returns null
+   * @return type of special field; {@link DfType#BOTTOM} if {@link #getSpecialField()} returns null
    */
   @NotNull
   default DfType getSpecialFieldType() {
@@ -94,7 +96,7 @@ public interface DfReferenceType extends DfType {
 
   /**
    * @param type type to check
-   * @return true if the supplied type is a reference type that contains references only 
+   * @return true if the supplied type is a reference type that contains references only
    * to local objects (not leaked from the current context to unknown methods)
    */
   static boolean isLocal(DfType type) {
@@ -125,9 +127,13 @@ public interface DfReferenceType extends DfType {
 
   @Override
   default boolean containsConstant(@NotNull DfConstantType<?> constant) {
-    return dropTypeConstraint().isSuperType(constant);
+    DfReferenceType filtered = dropTypeConstraint();
+    if (getConstraint().isComparedByEquals()) {
+      filtered = filtered.dropLocality();
+    }
+    return filtered.isSuperType(constant);
   }
 
   @Override
-  @NlsSafe String toString();
+  @NlsSafe @NotNull String toString();
 }

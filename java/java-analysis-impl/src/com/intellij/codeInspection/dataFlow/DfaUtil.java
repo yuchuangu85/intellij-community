@@ -1,12 +1,20 @@
 // Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.dataFlow;
 
-import com.intellij.codeInsight.ExpressionUtil;
 import com.intellij.codeInsight.Nullability;
+import com.intellij.codeInspection.dataFlow.java.JavaDfaInstructionVisitor;
+import com.intellij.codeInspection.dataFlow.jvm.JvmPsiRangeSetUtil;
+import com.intellij.codeInspection.dataFlow.jvm.JvmSpecialField;
+import com.intellij.codeInspection.dataFlow.lang.DfaInterceptor;
 import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeSet;
+import com.intellij.codeInspection.dataFlow.types.DfPrimitiveType;
 import com.intellij.codeInspection.dataFlow.types.DfReferenceType;
+import com.intellij.codeInspection.dataFlow.types.DfType;
 import com.intellij.codeInspection.dataFlow.types.DfTypes;
-import com.intellij.codeInspection.dataFlow.value.*;
+import com.intellij.codeInspection.dataFlow.value.DfaValue;
+import com.intellij.codeInspection.dataFlow.value.DfaWrappedValue;
+import com.intellij.codeInspection.dataFlow.value.RelationType;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.psi.*;
 import com.intellij.psi.controlFlow.DefUseUtil;
 import com.intellij.psi.impl.source.resolve.JavaResolveUtil;
@@ -16,7 +24,6 @@ import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.util.containers.ContainerUtil;
-import com.siyeh.ig.psiutils.ExpressionUtils;
 import com.siyeh.ig.psiutils.ParenthesesUtils;
 import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.ApiStatus;
@@ -24,7 +31,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 import static com.intellij.psi.CommonClassNames.JAVA_UTIL_COLLECTIONS;
 import static com.intellij.util.ObjectUtils.tryCast;
@@ -179,18 +186,19 @@ public final class DfaUtil {
     PsiElement body = owner.getBody();
     if (body == null) return Nullability.UNKNOWN;
 
-    final DataFlowRunner dfaRunner = new DataFlowRunner(owner.getProject());
-    final class BlockNullabilityVisitor extends StandardInstructionVisitor {
+    final var dfaRunner = new StandardDataFlowRunner(owner.getProject());
+
+    final class BlockNullabilityInterceptor implements DfaInterceptor<PsiExpression> {
       boolean hasNulls = false;
       boolean hasNotNulls = false;
       boolean hasUnknowns = false;
 
       @Override
-      protected void checkReturnValue(@NotNull DfaValue value,
-                                      @NotNull PsiExpression expression,
-                                      @NotNull PsiParameterListOwner context,
-                                      @NotNull DfaMemoryState state) {
-        if (context == owner) {
+      public void beforeValueReturn(@NotNull DfaValue value,
+                                    @Nullable PsiExpression expression,
+                                    @NotNull PsiElement context,
+                                    @NotNull DfaMemoryState state) {
+        if (context == owner && expression != null) {
           if (TypeConversionUtil.isPrimitiveAndNotNull(expression.getType()) || state.isNotNull(value)) {
             hasNotNulls = true;
           }
@@ -203,116 +211,19 @@ public final class DfaUtil {
         }
       }
     }
-    BlockNullabilityVisitor visitor = new BlockNullabilityVisitor();
-    final RunnerResult rc = dfaRunner.analyzeMethod(body, visitor);
+    var interceptor = new BlockNullabilityInterceptor();
+    final RunnerResult rc = dfaRunner.analyzeMethod(body, new JavaDfaInstructionVisitor(interceptor));
 
     if (rc == RunnerResult.OK) {
-      if (visitor.hasNulls) {
+      if (interceptor.hasNulls) {
         return suppressNullable ? Nullability.UNKNOWN : Nullability.NULLABLE;
       }
-      if (visitor.hasNotNulls && !visitor.hasUnknowns) {
+      if (interceptor.hasNotNulls && !interceptor.hasUnknowns) {
         return Nullability.NOT_NULL;
       }
     }
 
     return Nullability.UNKNOWN;
-  }
-
-  static DfaValue getPossiblyNonInitializedValue(@NotNull DfaValueFactory factory, @NotNull PsiField target, @NotNull PsiElement context) {
-    if (target.getType() instanceof PsiPrimitiveType) return null;
-    PsiMethod placeMethod = PsiTreeUtil.getParentOfType(context, PsiMethod.class, false, PsiClass.class, PsiLambdaExpression.class);
-    if (placeMethod == null) return null;
-
-    PsiClass placeClass = placeMethod.getContainingClass();
-    if (placeClass == null || placeClass != target.getContainingClass()) return null;
-    if (!placeMethod.hasModifierProperty(PsiModifier.STATIC) && target.hasModifierProperty(PsiModifier.STATIC)) return null;
-    if (getAccessOffset(placeMethod) >= getWriteOffset(target)) return null;
-
-    return factory.getObjectType(target.getType(), Nullability.NULLABLE);
-  }
-
-  private static int getWriteOffset(PsiField target) {
-    // Final field: written either in field initializer or in class initializer block which directly writes this field
-    // Non-final field: written either in field initializer, in class initializer which directly writes this field or calls any method,
-    //    or in other field initializer which directly writes this field or calls any method
-    boolean isFinal = target.hasModifierProperty(PsiModifier.FINAL);
-    int offset = Integer.MAX_VALUE;
-    if (target.getInitializer() != null) {
-      offset = target.getInitializer().getTextRange().getStartOffset();
-      if (isFinal) return offset;
-    }
-    PsiClass aClass = Objects.requireNonNull(target.getContainingClass());
-    PsiClassInitializer[] initializers = aClass.getInitializers();
-    Predicate<PsiElement> writesToTarget = element ->
-      !PsiTreeUtil.processElements(element, e -> !(e instanceof PsiExpression) ||
-                                                 !PsiUtil.isAccessedForWriting((PsiExpression)e) ||
-                                                 !ExpressionUtils.isReferenceTo((PsiExpression)e, target));
-    Predicate<PsiElement> hasSideEffectCall = element -> !PsiTreeUtil.findChildrenOfType(element, PsiMethodCallExpression.class).stream()
-      .map(PsiMethodCallExpression::resolveMethod).allMatch(method -> method != null && JavaMethodContractUtil.isPure(method));
-    for (PsiClassInitializer initializer : initializers) {
-      if (initializer.hasModifierProperty(PsiModifier.STATIC) != target.hasModifierProperty(PsiModifier.STATIC)) continue;
-      if (!isFinal && hasSideEffectCall.test(initializer)) {
-        // non-final field could be written indirectly (via method call), so assume it's written in the first applicable initializer
-        offset = Math.min(offset, initializer.getTextRange().getStartOffset());
-        break;
-      }
-      if (writesToTarget.test(initializer)) {
-        offset = Math.min(offset, initializer.getTextRange().getStartOffset());
-        if (isFinal) return offset;
-        break;
-      }
-    }
-    if (!isFinal) {
-      for (PsiField field : aClass.getFields()) {
-        if (field.hasModifierProperty(PsiModifier.STATIC) != target.hasModifierProperty(PsiModifier.STATIC)) continue;
-        if (hasSideEffectCall.test(field.getInitializer()) || writesToTarget.test(field)) {
-          offset = Math.min(offset, field.getTextRange().getStartOffset());
-          break;
-        }
-      }
-    }
-    return offset;
-  }
-
-  private static int getAccessOffset(PsiMethod referrer) {
-    PsiClass aClass = Objects.requireNonNull(referrer.getContainingClass());
-    boolean isStatic = referrer.hasModifierProperty(PsiModifier.STATIC);
-    for (PsiField field : aClass.getFields()) {
-      if (field.hasModifierProperty(PsiModifier.STATIC) != isStatic) continue;
-      PsiExpression initializer = field.getInitializer();
-      Predicate<PsiExpression> callToMethod = (PsiExpression e) -> {
-        if (!(e instanceof PsiMethodCallExpression)) return false;
-        PsiMethodCallExpression call = (PsiMethodCallExpression)e;
-        return call.getMethodExpression().isReferenceTo(referrer) &&
-               (isStatic || ExpressionUtil.isEffectivelyUnqualified(call.getMethodExpression()));
-      };
-      if (ExpressionUtils.isMatchingChildAlwaysExecuted(initializer, callToMethod)) {
-        // current method is definitely called from some field initialization
-        return field.getTextRange().getStartOffset();
-      }
-    }
-    return Integer.MAX_VALUE; // accessed after initialization or at unknown moment
-  }
-
-  public static boolean hasInitializationHacks(@NotNull PsiVariable var) {
-    if (!(var instanceof PsiField)) return false;
-    PsiClass containingClass = ((PsiField)var).getContainingClass();
-    return containingClass != null && System.class.getName().equals(containingClass.getQualifiedName());
-  }
-
-  public static boolean ignoreInitializer(PsiVariable variable) {
-    if (variable instanceof PsiField && variable.hasModifierProperty(PsiModifier.FINAL) && variable.getType().equals(PsiType.BOOLEAN)) {
-      // Skip boolean constant fields as they usually used as control knobs to modify program logic
-      // it's better to analyze both true and false values even if it's predefined
-      PsiLiteralExpression initializer = tryCast(PsiUtil.skipParenthesizedExprDown(variable.getInitializer()), PsiLiteralExpression.class);
-      return initializer != null && initializer.getValue() instanceof Boolean;
-    }
-    return false;
-  }
-
-  static boolean isEffectivelyUnqualified(DfaVariableValue variableValue) {
-    return variableValue.getQualifier() == null ||
-     variableValue.getQualifier().getDescriptor() instanceof DfaExpressionFactory.ThisDescriptor;
   }
 
   public static boolean hasImplicitImpureSuperCall(PsiClass aClass, PsiMethod constructor) {
@@ -325,7 +236,7 @@ public final class DfaUtil {
 
   /**
    * Returns a surrounding PSI element which should be analyzed via DFA
-   * (e.g. passed to {@link DataFlowRunner#analyzeMethodRecursively(PsiElement, StandardInstructionVisitor)}) to cover
+   * (e.g. passed to {@link StandardDataFlowRunner#analyzeMethodRecursively(PsiElement, InstructionVisitor)}) to cover
    * given expression.
    *
    * @param expression expression to cover
@@ -357,17 +268,28 @@ public final class DfaUtil {
   }
 
   public static DfaValue boxUnbox(DfaValue value, @Nullable PsiType type) {
-    if (TypeConversionUtil.isPrimitiveWrapper(type)) {
-      if (TypeConversionUtil.isPrimitiveAndNotNull(value.getType())) {
-        return value.getFactory().getWrapperFactory().createWrapper(DfTypes.typedObject(type, Nullability.NOT_NULL), SpecialField.UNBOX, value);
+    return boxUnbox(value, DfTypes.typedObject(type, Nullability.UNKNOWN));
+  }
+
+  public static DfaValue boxUnbox(DfaValue value, @NotNull DfType type) {
+    if (TypeConstraint.fromDfType(type).isPrimitiveWrapper()) {
+      if (value.getDfType() instanceof DfPrimitiveType) {
+        return value.getFactory().getWrapperFactory().createWrapper(type.meet(DfTypes.NOT_NULL_OBJECT), JvmSpecialField.UNBOX, value);
       }
     }
-    if (TypeConversionUtil.isPrimitiveAndNotNull(type)) {
-      if (value instanceof DfaWrappedValue || TypeConversionUtil.isPrimitiveWrapper(value.getType())) {
-        return SpecialField.UNBOX.createValue(value.getFactory(), value);
+    if (type instanceof DfPrimitiveType) {
+      if (value.getDfType() instanceof DfPrimitiveType) {
+        PsiPrimitiveType psiType = ((DfPrimitiveType)type).getPsiType();
+        DfPrimitiveType valueType = (DfPrimitiveType)value.getDfType();
+        if (!valueType.getPsiType().equals(psiType)) {
+          return value.getFactory().fromDfType(valueType.castTo(psiType));
+        }
+      }
+      if (value instanceof DfaWrappedValue || TypeConstraint.fromDfType(value.getDfType()).isPrimitiveWrapper()) {
+        return JvmSpecialField.UNBOX.createValue(value.getFactory(), value);
       }
       if (value.getDfType() instanceof DfReferenceType) {
-        return value.getFactory().getObjectType(type, Nullability.NOT_NULL);
+        return value.getFactory().fromDfType(type);
       }
     }
     return value;
@@ -380,9 +302,9 @@ public final class DfaUtil {
     List<MethodContract> rangeContracts = new ArrayList<>();
     for (int i = 0; i < parameters.length; i++) {
       PsiParameter parameter = parameters[i];
-      LongRangeSet fromType = LongRangeSet.fromType(parameter.getType());
+      LongRangeSet fromType = JvmPsiRangeSetUtil.typeRange(parameter.getType());
       if (fromType == null) continue;
-      LongRangeSet fromAnnotation = LongRangeSet.fromPsiElement(parameter);
+      LongRangeSet fromAnnotation = JvmPsiRangeSetUtil.fromPsiElement(parameter);
       if (fromAnnotation.min() > fromType.min()) {
         MethodContract contract = MethodContract.singleConditionContract(
           ContractValue.argument(i), RelationType.LT, ContractValue.constant(fromAnnotation.min(), parameter.getType()),
@@ -409,5 +331,25 @@ public final class DfaUtil {
   public static boolean isNaN(Object value) {
     return value instanceof Double && ((Double)value).isNaN() ||
            value instanceof Float && ((Float)value).isNaN();
+  }
+
+  /**
+   * @param poset input poset (mutable)
+   * @param predicate non-strict partial order over the input poset
+   * @param <T> type of poset elements
+   * @return the longest strong upwards antichain contained in the poset (input poset object with some elements removed)
+   */
+  public static <T, C extends Collection<T>> C upwardsAntichain(@NotNull C poset, @NotNull BiPredicate<T, T> predicate) {
+    for (Iterator<T> iterator = poset.iterator(); iterator.hasNext(); ) {
+      T left = iterator.next();
+      for (T right : poset) {
+        ProgressManager.checkCanceled();
+        if (right != left && predicate.test(left, right)) {
+          iterator.remove();
+          break;
+        }
+      }
+    }
+    return poset;
   }
 }

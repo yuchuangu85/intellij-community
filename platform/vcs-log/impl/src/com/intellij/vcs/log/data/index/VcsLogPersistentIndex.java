@@ -1,9 +1,8 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.log.data.index;
 
 import com.intellij.concurrency.ConcurrentCollectionFactory;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -56,7 +55,7 @@ import static com.intellij.vcs.log.util.PersistentUtil.calcIndexId;
 @NonNls
 public class VcsLogPersistentIndex implements VcsLogModifiableIndex, Disposable {
   private static final Logger LOG = Logger.getInstance(VcsLogPersistentIndex.class);
-  private static final int VERSION = 16;
+  private static final int VERSION = 18;
   public static final VcsLogProgress.ProgressKey INDEXING = new VcsLogProgress.ProgressKey("index");
 
   @NotNull private final Project myProject;
@@ -97,7 +96,7 @@ public class VcsLogPersistentIndex implements VcsLogModifiableIndex, Disposable 
     myIndexers = getAvailableIndexers(providers);
     myRoots = new LinkedHashSet<>(myIndexers.keySet());
 
-    VcsUserRegistry userRegistry = ServiceManager.getService(myProject, VcsUserRegistry.class);
+    VcsUserRegistry userRegistry = myProject.getService(VcsUserRegistry.class);
 
     myIndexStorage = createIndexStorage(fatalErrorsConsumer, myProject.getName(), calcIndexId(myProject, myIndexers), userRegistry);
     if (myIndexStorage != null) {
@@ -296,7 +295,6 @@ public class VcsLogPersistentIndex implements VcsLogModifiableIndex, Disposable 
     private static final String PARENTS = "parents";
     private static final String COMMITTERS = "committers";
     private static final String TIMESTAMPS = "timestamps";
-    private static final int MESSAGES_VERSION = 0;
     @NotNull public final PersistentSet<Integer> commits;
     @NotNull public final PersistentMap<Integer, String> messages;
     @NotNull public final PersistentMap<Integer, List<Integer>> parents;
@@ -319,38 +317,40 @@ public class VcsLogPersistentIndex implements VcsLogModifiableIndex, Disposable 
       Disposer.register(parentDisposable, this);
 
       try {
-        StorageId storageId = new StorageId(projectName, INDEX, logId, getVersion());
+        StorageId storageId = indexStorageId(projectName, logId);
+        StorageLockContext storageLockContext = new StorageLockContext(true);
 
         Path commitsStorage = storageId.getStorageFile(COMMITS);
         myIsFresh = !Files.exists(commitsStorage);
-        commits = new PersistentSetImpl<>(commitsStorage, EnumeratorIntegerDescriptor.INSTANCE, Page.PAGE_SIZE, null,
+        commits = new PersistentSetImpl<>(commitsStorage, EnumeratorIntegerDescriptor.INSTANCE, Page.PAGE_SIZE, storageLockContext,
                                           storageId.getVersion());
         Disposer.register(this, () -> catchAndWarn(commits::close));
 
-        Path messagesStorage = new StorageId(projectName, INDEX, logId,
-                                             VcsLogStorageImpl.VERSION + MESSAGES_VERSION).getStorageFile(MESSAGES);
-        messages = new PersistentHashMap<>(messagesStorage, EnumeratorIntegerDescriptor.INSTANCE, EnumeratorStringDescriptor.INSTANCE,
-                                           Page.PAGE_SIZE);
+        messages = new PersistentHashMap<>(storageId.getStorageFile(MESSAGES), EnumeratorIntegerDescriptor.INSTANCE,
+                                           EnumeratorStringDescriptor.INSTANCE, Page.PAGE_SIZE, storageId.getVersion(),
+                                           storageLockContext);
         Disposer.register(this, () -> catchAndWarn(messages::close));
 
-        trigrams = new VcsLogMessagesTrigramIndex(storageId, fatalErrorHandler, this);
-        users = new VcsLogUserIndex(storageId, userRegistry, fatalErrorHandler, this);
-        paths = new VcsLogPathsIndex(storageId, storage, roots, fatalErrorHandler, this);
+        trigrams = new VcsLogMessagesTrigramIndex(storageId, storageLockContext, fatalErrorHandler, this);
+        users = new VcsLogUserIndex(storageId, storageLockContext, userRegistry, fatalErrorHandler, this);
+        paths = new VcsLogPathsIndex(storageId, storage, roots, storageLockContext, fatalErrorHandler, this);
 
         Path parentsStorage = storageId.getStorageFile(PARENTS);
         parents = new PersistentHashMap<>(parentsStorage, EnumeratorIntegerDescriptor.INSTANCE,
-                                          new IntListDataExternalizer(), Page.PAGE_SIZE, storageId.getVersion());
+                                          new IntListDataExternalizer(), Page.PAGE_SIZE, storageId.getVersion(), storageLockContext);
         Disposer.register(this, () -> catchAndWarn(parents::close));
 
         Path committersStorage = storageId.getStorageFile(COMMITTERS);
         committers = new PersistentHashMap<>(committersStorage, EnumeratorIntegerDescriptor.INSTANCE, EnumeratorIntegerDescriptor.INSTANCE,
-                                             Page.PAGE_SIZE, storageId.getVersion());
+                                             Page.PAGE_SIZE, storageId.getVersion(), storageLockContext);
         Disposer.register(this, () -> catchAndWarn(committers::close));
 
         Path timestampsStorage = storageId.getStorageFile(TIMESTAMPS);
         timestamps = new PersistentHashMap<>(timestampsStorage, EnumeratorIntegerDescriptor.INSTANCE, new LongPairDataExternalizer(),
-                                             Page.PAGE_SIZE, storageId.getVersion());
+                                             Page.PAGE_SIZE, storageId.getVersion(), storageLockContext);
         Disposer.register(this, () -> catchAndWarn(timestamps::close));
+
+        checkConsistency();
       }
       catch (Throwable t) {
         Disposer.dispose(this);
@@ -358,28 +358,24 @@ public class VcsLogPersistentIndex implements VcsLogModifiableIndex, Disposable 
       }
     }
 
+    private void checkConsistency() throws IOException {
+      if (!commits.isEmpty()) {
+        boolean trigramsEmpty = trigrams.isEmpty();
+        boolean usersEmpty = users.isEmpty();
+        boolean pathsEmpty = paths.isEmpty();
+        if (trigramsEmpty || usersEmpty || pathsEmpty) {
+          IOException exception = new IOException("Broken index maps:\n" +
+                                                  "trigrams empty " + trigramsEmpty + "\n" +
+                                                  "users empty " + usersEmpty + "\n" +
+                                                  "paths empty " + pathsEmpty);
+          LOG.error(exception);
+          throw exception;
+        }
+      }
+    }
+
     void markCorrupted() {
       catchAndWarn(commits::markCorrupted);
-    }
-
-    private static void catchAndWarn(@NotNull ThrowableRunnable<IOException> runnable) {
-      try {
-        runnable.run();
-      }
-      catch (IOException e) {
-        LOG.warn(e);
-      }
-    }
-
-    private static void cleanup(@NotNull String projectName, @NotNull String logId) {
-      StorageId storageId = new StorageId(projectName, INDEX, logId, getVersion());
-      if (!storageId.cleanupAllStorageFiles()) {
-        LOG.error("Could not clean up storage files in " + storageId.getSubdir());
-      }
-    }
-
-    private static int getVersion() {
-      return VcsLogStorageImpl.VERSION + VERSION;
     }
 
     public void unmarkFresh() {
@@ -392,6 +388,27 @@ public class VcsLogPersistentIndex implements VcsLogModifiableIndex, Disposable 
 
     @Override
     public void dispose() {
+    }
+
+    private static void catchAndWarn(@NotNull ThrowableRunnable<IOException> runnable) {
+      try {
+        runnable.run();
+      }
+      catch (IOException e) {
+        LOG.warn(e);
+      }
+    }
+
+    private static void cleanup(@NotNull String projectName, @NotNull String logId) {
+      StorageId storageId = indexStorageId(projectName, logId);
+      if (!storageId.cleanupAllStorageFiles()) {
+        LOG.error("Could not clean up storage files in " + storageId.getProjectStorageDir());
+      }
+    }
+
+    @NotNull
+    private static StorageId indexStorageId(@NotNull String projectName, @NotNull String logId) {
+      return new StorageId(projectName, INDEX, logId, VcsLogStorageImpl.VERSION + VERSION);
     }
   }
 

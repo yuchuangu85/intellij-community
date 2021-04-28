@@ -3,6 +3,9 @@ package org.jetbrains.idea.maven.indices;
 
 import com.intellij.jarRepository.services.bintray.BintrayModel;
 import com.intellij.jarRepository.services.bintray.BintrayRepositoryService;
+import com.intellij.openapi.diagnostic.Attachment;
+import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.util.ModificationTracker;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
@@ -176,9 +179,12 @@ public class MavenIndex implements MavenSearchIndex {
       try {
         doOpen();
       }
-      catch (Exception e1) {
-        final boolean versionUpdated = e1.getCause() instanceof PersistentEnumeratorBase.VersionUpdatedException;
-        if (!versionUpdated) MavenLog.LOG.warn(e1);
+      catch (Exception e) {
+        if (e instanceof ProcessCanceledException) {
+          MavenLog.LOG.error("PCE should not be thrown", new Attachment("pce", e));
+        }
+        final boolean versionUpdated = e.getCause() instanceof PersistentEnumeratorBase.VersionUpdatedException;
+        if (!versionUpdated) MavenLog.LOG.warn(e);
 
         try {
           doOpen();
@@ -195,19 +201,22 @@ public class MavenIndex implements MavenSearchIndex {
   }
 
   private void doOpen() throws Exception {
-    File dataDir;
-    if (myDataDirName == null) {
-      dataDir = createNewDataDir();
-      myDataDirName = dataDir.getName();
-    }
-    else {
-      dataDir = new File(myDir, myDataDirName);
-      dataDir.mkdirs();
-    }
-    if (myData != null) {
-      myData.close(true);
-    }
-    myData = new IndexData(dataDir);
+    ProgressManager.getInstance().computeInNonCancelableSection(() -> {
+      File dataDir;
+      if (myDataDirName == null) {
+        dataDir = createNewDataDir();
+        myDataDirName = dataDir.getName();
+      }
+      else {
+        dataDir = new File(myDir, myDataDirName);
+        dataDir.mkdirs();
+      }
+      if (myData != null) {
+        myData.close(true);
+      }
+      myData = new IndexData(dataDir);
+      return null;
+    });
   }
 
   private void cleanupBrokenData() {

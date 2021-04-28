@@ -225,7 +225,7 @@ internal class MutableRefsTable(
     }.let { }
   }
 
-  internal fun updateChildrenOfParent(connectionId: ConnectionId, parentId: EntityId, childrenIds: Collection<EntityId>) {
+  internal fun updateChildrenOfParent(connectionId: ConnectionId, parentId: EntityId, childrenIds: List<EntityId>) {
     when (connectionId.connectionType) {
       ConnectionType.ONE_TO_MANY -> {
         val copiedMap = getOneToManyMutableMap(connectionId)
@@ -240,6 +240,11 @@ internal class MutableRefsTable(
       ConnectionType.ONE_TO_ABSTRACT_MANY -> {
         val copiedMap = getOneToAbstractManyMutableMap(connectionId)
         copiedMap.removeValue(parentId)
+
+        // In theory this removing can be avoided because keys will be replaced anyway, but without this cleanup we may get an
+        // incorrect ordering of the children
+        childrenIds.forEach { copiedMap.remove(it) }
+
         childrenIds.forEach { copiedMap[it] = parentId }
       }
       ConnectionType.ABSTRACT_ONE_TO_ONE -> {
@@ -408,18 +413,18 @@ internal sealed class AbstractRefsTable {
     return res
   }
 
-  fun getChildrenRefsOfParentBy(parentId: EntityId): Map<ConnectionId, Set<EntityId>> {
+  fun getChildrenRefsOfParentBy(parentId: EntityId): Map<ConnectionId, List<EntityId>> {
     val parentArrayId = parentId.arrayId
     val parentClassId = parentId.clazz
     val parentClass = parentId.clazz.findEntityClass<WorkspaceEntity>()
 
-    val res = HashMap<ConnectionId, Set<EntityId>>()
+    val res = HashMap<ConnectionId, List<EntityId>>()
 
     val filteredOneToMany = oneToManyContainer.filterKeys { it.parentClass == parentClassId }
     for ((connectionId, bimap) in filteredOneToMany) {
       val keys = bimap.getKeys(parentArrayId)
       if (!keys.isEmpty()) {
-        val children = keys.map { EntityId(it, connectionId.childClass) }.toSet()
+        val children = keys.map { EntityId(it, connectionId.childClass) }.toList()
         val existingValue = res.putIfAbsent(connectionId, children)
         if (existingValue != null) thisLogger().error("These children already exist")
       }
@@ -429,7 +434,7 @@ internal sealed class AbstractRefsTable {
     for ((connectionId, bimap) in filteredOneToOne) {
       if (!bimap.containsValue(parentArrayId)) continue
       val key = bimap.getKey(parentArrayId)
-      val existingValue = res.putIfAbsent(connectionId, setOf(EntityId(key, connectionId.childClass)))
+      val existingValue = res.putIfAbsent(connectionId, listOf(EntityId(key, connectionId.childClass)))
       if (existingValue != null) thisLogger().error("These children already exist")
     }
 
@@ -438,7 +443,7 @@ internal sealed class AbstractRefsTable {
     for ((connectionId, bimap) in filteredOneToAbstractMany) {
       val keys = bimap.getKeysByValue(parentId) ?: continue
       if (keys.isNotEmpty()) {
-        val existingValue = res.putIfAbsent(connectionId, keys.toSet())
+        val existingValue = res.putIfAbsent(connectionId, keys.toList())
         if (existingValue != null) thisLogger().error("These children already exist")
       }
     }
@@ -448,7 +453,7 @@ internal sealed class AbstractRefsTable {
     for ((connectionId, bimap) in filteredAbstractOneToOne) {
       val key = bimap.inverse()[parentId]
       if (key == null) continue
-      val existingValue = res.putIfAbsent(connectionId, setOf(key))
+      val existingValue = res.putIfAbsent(connectionId, listOf(key))
       if (existingValue != null) thisLogger().error("These children already exist")
     }
 

@@ -11,18 +11,16 @@ import java.util.zip.ZipFile
 @Suppress("ReplaceNegatedIsEmptyWithIsNotEmpty")
 class PluginXmlPathResolver(private val pluginJarFiles: List<Path>) : PathResolver {
   companion object {
-    @JvmField
     // don't use Kotlin emptyList here
-    val DEFAULT_PATH_RESOLVER: PathResolver = PluginXmlPathResolver(Collections.emptyList())
+    @JvmField val DEFAULT_PATH_RESOLVER: PathResolver = PluginXmlPathResolver(Collections.emptyList())
 
-    @JvmStatic
     private fun loadUsingZipFile(readInto: RawPluginDescriptor,
                                  readContext: ReadModuleContext,
                                  pathResolver: PathResolver,
                                  dataLoader: DataLoader,
                                  jarFile: Path,
                                  relativePath: String,
-                                 base: String?): Boolean {
+                                 includeBase: String?): Boolean {
       val zipFile = ZipFile(jarFile.toFile())
       try {
         // do not use kotlin stdlib here
@@ -31,7 +29,7 @@ class PluginXmlPathResolver(private val pluginJarFiles: List<Path>) : PathResolv
                              readContext = readContext,
                              pathResolver = pathResolver,
                              dataLoader = dataLoader,
-                             includeBase = getChildBase(base = base, relativePath = relativePath),
+                             includeBase = includeBase,
                              readInto = readInto,
                              locationSource = jarFile.toString())
         return true
@@ -45,14 +43,12 @@ class PluginXmlPathResolver(private val pluginJarFiles: List<Path>) : PathResolv
       }
     }
 
-    @JvmStatic
-    fun getParentPath(path: String): String {
+    internal fun getParentPath(path: String): String {
       val end = path.lastIndexOf('/')
       return if (end == -1) "" else path.substring(0, end)
     }
 
-    @JvmStatic
-    fun toLoadPath(relativePath: String, base: String?): String {
+    internal fun toLoadPath(relativePath: String, base: String?): String {
       return when {
         relativePath[0] == '/' -> relativePath.substring(1)
         relativePath.startsWith("intellij.") -> relativePath
@@ -61,8 +57,7 @@ class PluginXmlPathResolver(private val pluginJarFiles: List<Path>) : PathResolv
       }
     }
 
-    @JvmStatic
-    fun getChildBase(base: String?, relativePath: String): String? {
+    internal fun getChildBase(base: String?, relativePath: String): String? {
       val end = relativePath.lastIndexOf('/')
       if (end <= 0 || relativePath.startsWith("/META-INF/")) {
         return base
@@ -90,7 +85,11 @@ class PluginXmlPathResolver(private val pluginJarFiles: List<Path>) : PathResolv
       return true
     }
 
-    if (findInJarFiles(readInto = readInto, dataLoader = dataLoader, readContext = readContext, relativePath = path, base = base)) {
+    if (findInJarFiles(readInto = readInto,
+                       dataLoader = dataLoader,
+                       readContext = readContext,
+                       relativePath = path,
+                       includeBase = getChildBase(base = base, relativePath = relativePath))) {
       return true
     }
 
@@ -126,7 +125,7 @@ class PluginXmlPathResolver(private val pluginJarFiles: List<Path>) : PathResolv
     }
 
     val result = readInto ?: RawPluginDescriptor()
-    if (findInJarFiles(readInto = result, dataLoader = dataLoader, readContext = readContext, relativePath = path, base = null)) {
+    if (findInJarFiles(readInto = result, dataLoader = dataLoader, readContext = readContext, relativePath = path, includeBase = null)) {
       return result
     }
 
@@ -141,7 +140,7 @@ class PluginXmlPathResolver(private val pluginJarFiles: List<Path>) : PathResolv
                              readContext: ReadModuleContext,
                              dataLoader: DataLoader,
                              relativePath: String,
-                             base: String?): Boolean {
+                             includeBase: String?): Boolean {
     val pool = dataLoader.pool
     for (jarFile in pluginJarFiles) {
       if (dataLoader.isExcludedFromSubSearch(jarFile)) {
@@ -155,7 +154,7 @@ class PluginXmlPathResolver(private val pluginJarFiles: List<Path>) : PathResolv
                              dataLoader = dataLoader,
                              jarFile = jarFile,
                              relativePath = relativePath,
-                             base = base)) {
+                             includeBase = includeBase)) {
           return true
         }
       }
@@ -173,7 +172,7 @@ class PluginXmlPathResolver(private val pluginJarFiles: List<Path>) : PathResolv
                                readContext = readContext,
                                pathResolver = this,
                                dataLoader = dataLoader,
-                               includeBase = getChildBase(base = base, relativePath = relativePath),
+                               includeBase = includeBase,
                                readInto = readInto,
                                locationSource = jarFile.toString())
           return true

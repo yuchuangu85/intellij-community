@@ -18,7 +18,6 @@ enum KotlinPluginKind {
      "kotlin-ultimate.mobile-native",
      "mobile-ide/mobile-native/resources",
      [
-       Couple.of("artifacts/kotlin-android-extensions", "kotlin-android-extensions"),
        Couple.of("artifacts/kotlin-ocswift", "kotlin-ocswift"),
        Couple.of("artifacts/MobilePlugin", "Mobile")
      ]),
@@ -86,10 +85,10 @@ enum KotlinPluginKind {
   }
 
   private static String version(CompilationContext context, String rawBuildNumber) {
-    def parts = rawBuildNumber.split('\\.')
-    assert parts.size() == 2
-    def intellijMajorVersion = parts[0]
-    def buildNumber = parts[1]
+    def index = rawBuildNumber.indexOf('.')
+    assert index > 0
+    def intellijMajorVersion = rawBuildNumber.substring(0, index)
+    def buildNumber = rawBuildNumber.substring(++index)
     def kotlinVersion = context.project.libraryCollection.libraries
                           .find { it.name.startsWith("kotlinc.") && it.type instanceof JpsRepositoryLibraryType }
                           ?.asTyped(JpsRepositoryLibraryType.INSTANCE)

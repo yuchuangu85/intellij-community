@@ -5,14 +5,13 @@ package com.intellij.ide.plugins
 import com.intellij.ide.plugins.cl.PluginClassLoader
 import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.util.BuildNumber
-import com.intellij.openapi.util.SafeJdomFactory
-import com.intellij.openapi.util.SafeStAXStreamBuilder
 import com.intellij.openapi.util.io.IoTestUtil
 import com.intellij.platform.util.plugins.DataLoader
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.UsefulTestCase
 import com.intellij.testFramework.assertions.Assertions.assertThat
 import com.intellij.testFramework.rules.InMemoryFsRule
+import com.intellij.util.NoOpXmlInterner
 import com.intellij.util.io.directoryStreamIfExists
 import com.intellij.util.io.write
 import com.intellij.util.lang.UrlClassLoader
@@ -35,14 +34,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
 private fun loadDescriptors(dir: Path, buildNumber: BuildNumber, disabledPlugins: Set<PluginId> = emptySet()): DescriptorListLoadingContext {
-  val context = DescriptorListLoadingContext(disabledPlugins, PluginLoadingResult(emptyMap(), Supplier { buildNumber }))
+  val context = DescriptorListLoadingContext(disabledPlugins = disabledPlugins,
+                                             result = PluginLoadingResult(emptyMap(), Supplier { buildNumber }))
   context.usePluginClassLoader = true
 
   // constant order in tests
   val paths: List<Path> = dir.directoryStreamIfExists { it.sorted() }!!
   context.use {
     for (file in paths) {
-      val descriptor = PluginDescriptorLoader.loadDescriptor(file, false, context) ?: continue
+      val descriptor = loadDescriptor(file, false, context) ?: continue
       context.result.add(descriptor, false)
     }
   }
@@ -71,14 +71,14 @@ class PluginDescriptorTest {
   fun testOptionalDescriptors() {
     val descriptor = loadDescriptorInTest("family")
     assertThat(descriptor).isNotNull()
-    assertThat(descriptor.getPluginDependencies().size).isEqualTo(1)
+    assertThat(descriptor.pluginDependencies.size).isEqualTo(1)
   }
 
   @Test
   fun testMultipleOptionalDescriptors() {
     val descriptor = loadDescriptorInTest("multipleOptionalDescriptors")
     assertThat(descriptor).isNotNull()
-    val pluginDependencies = descriptor.getPluginDependencies()
+    val pluginDependencies = descriptor.pluginDependencies
     assertThat(pluginDependencies).hasSize(2)
     assertThat(pluginDependencies.map { it.pluginId.idString }).containsExactly("dep2", "dep1")
   }
@@ -108,7 +108,7 @@ class PluginDescriptorTest {
       Path.of(testDataPath, "duplicate1.jar").toUri().toURL(),
       Path.of(testDataPath, "duplicate2.jar").toUri().toURL()
     )
-    assertThat(PluginDescriptorLoader.testLoadDescriptorsFromClassPath(URLClassLoader(urls, null))).hasSize(1)
+    assertThat(testLoadDescriptorsFromClassPath(URLClassLoader(urls, null))).hasSize(1)
   }
 
   @Test
@@ -130,7 +130,7 @@ class PluginDescriptorTest {
         urls.add(path.toUri().toURL())
       }
     }
-    val descriptors = PluginDescriptorLoader.testLoadDescriptorsFromClassPath(URLClassLoader(urls.toTypedArray(), null))
+    val descriptors = testLoadDescriptorsFromClassPath(URLClassLoader(urls.toTypedArray(), null))
     // core and com.intellij.workspace
     assertThat(descriptors).hasSize(1)
   }
@@ -152,8 +152,8 @@ class PluginDescriptorTest {
   fun testDuplicateDependency() {
     val descriptor = loadDescriptorInTest("duplicateDependency")
     assertThat(descriptor).isNotNull()
-    assertThat(descriptor.getPluginDependencies().filter { it.isOptional }).isEmpty()
-    assertThat(descriptor.getPluginDependencies().map { it.pluginId }).containsExactly(PluginId.getId("foo"))
+    assertThat(descriptor.pluginDependencies.filter { it.isOptional }).isEmpty()
+    assertThat(descriptor.pluginDependencies.map { it.pluginId }).containsExactly(PluginId.getId("foo"))
   }
 
   @Test
@@ -227,8 +227,8 @@ class PluginDescriptorTest {
       </idea-plugin>""")
 
     val result = loadDescriptors(pluginDir, BuildNumber.fromString("4.0")!!).result
-    assertThat(result.pluginErrors).isEmpty()
-    val plugins = result.enabledPlugins
+    assertThat(result.hasPluginErrors).isFalse()
+    val plugins = result.getEnabledPlugins()
     assertThat(plugins).hasSize(1)
     assertThat(result.duplicateModuleMap).isNull()
     assertThat(result.incompletePlugins).isEmpty()
@@ -336,7 +336,7 @@ class PluginDescriptorTest {
 
     val foo = list[1]
 
-    assertThat(foo.getPluginDependencies().map { it.pluginId }).containsExactly(bar.pluginId)
+    assertThat(foo.pluginDependencies.map { it.pluginId }).containsExactly(bar.pluginId)
 
     assertThat(foo.pluginId.idString).isEqualTo("foo")
     val fooClassLoader = foo.pluginClassLoader as PluginClassLoader
@@ -384,13 +384,13 @@ class PluginDescriptorTest {
     }
 
     val loader1 = TestLoader("", "/spaces%20spaces/")
-    TestCase.assertEquals(1, PluginDescriptorLoader.testLoadDescriptorsFromClassPath(loader1).size)
+    TestCase.assertEquals(1, testLoadDescriptorsFromClassPath(loader1).size)
     val loader2 = TestLoader("", "/spaces spaces/")
-    TestCase.assertEquals(1, PluginDescriptorLoader.testLoadDescriptorsFromClassPath(loader2).size)
+    TestCase.assertEquals(1, testLoadDescriptorsFromClassPath(loader2).size)
     val loader3 = TestLoader("jar:", "/jar%20spaces.jar!/")
-    TestCase.assertEquals(1, PluginDescriptorLoader.testLoadDescriptorsFromClassPath(loader3).size)
+    TestCase.assertEquals(1, testLoadDescriptorsFromClassPath(loader3).size)
     val loader4 = TestLoader("jar:", "/jar spaces.jar!/")
-    assertThat(PluginDescriptorLoader.testLoadDescriptorsFromClassPath(loader4)).hasSize(1)
+    assertThat(testLoadDescriptorsFromClassPath(loader4)).hasSize(1)
   }
 
   @Test
@@ -419,7 +419,7 @@ class PluginDescriptorTest {
     val descriptor = loadDescriptorInTest("disabled", setOf(PluginId.getId("com.intellij.disabled")))
     assertFalse(descriptor.isEnabled)
     assertEquals("This is a disabled plugin", descriptor.description)
-    assertThat(descriptor.getPluginDependencies().map { it.pluginId.idString }).containsExactly("com.intellij.modules.lang")
+    assertThat(descriptor.pluginDependencies.map { it.pluginId.idString }).containsExactly("com.intellij.modules.lang")
   }
 
   @Test
@@ -482,8 +482,7 @@ fun readDescriptorForTest(path: Path, isBundled: Boolean, input: ByteArray, id: 
   val raw = readModuleDescriptor(
     input = input,
     readContext = object : ReadModuleContext {
-      override val jdomFactory: SafeJdomFactory
-        get() = SafeStAXStreamBuilder.FACTORY
+      override val interner = NoOpXmlInterner
       override val isMissingIncludeIgnored: Boolean
         get() = false
     },
@@ -500,7 +499,7 @@ fun readDescriptorForTest(path: Path, isBundled: Boolean, input: ByteArray, id: 
   result.readExternal(
     raw = raw,
     isSub = false,
-    context = DescriptorListLoadingContext.createSingleDescriptorContext(Collections.emptySet()),
+    context = DescriptorListLoadingContext(disabledPlugins = Collections.emptySet()),
     pathResolver = pathResolver,
     dataLoader = dataLoader
   )

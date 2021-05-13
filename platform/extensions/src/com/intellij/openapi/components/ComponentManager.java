@@ -4,7 +4,6 @@ package com.intellij.openapi.components;
 import com.intellij.diagnostic.ActivityCategory;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.extensions.*;
-import com.intellij.openapi.extensions.impl.ExtensionDescriptor;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.UserDataHolder;
 import com.intellij.util.ReflectionUtil;
@@ -24,6 +23,7 @@ import java.util.Map;
  * @see com.intellij.openapi.application.Application
  * @see com.intellij.openapi.project.Project
  */
+@ApiStatus.NonExtendable
 public interface ComponentManager extends UserDataHolder, Disposable, AreaInstance {
   /**
    * @deprecated Use {@link #getComponent(Class)} instead.

@@ -20,6 +20,7 @@ import com.intellij.openapi.actionSystem.impl.ActionManagerImpl;
 import com.intellij.openapi.application.*;
 import com.intellij.openapi.application.ex.ApplicationManagerEx;
 import com.intellij.openapi.application.impl.LaterInvocator;
+import com.intellij.openapi.diagnostic.ControlFlowException;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.keymap.Keymap;
 import com.intellij.openapi.keymap.KeymapManager;
@@ -223,7 +224,7 @@ public final class IdeEventQueue extends EventQueue {
       myPostEventListeners.addListener(IdeEventQueue::skipMoveResizeEvents);
     }
 
-    if (SystemProperties.getBooleanProperty("custom.kfm.typeahead.handler", true)) {
+    if (SystemProperties.getBooleanProperty("custom.kfm.typeahead.handler", false)) {
       ((IdeKeyboardFocusManager)KeyboardFocusManager.getCurrentKeyboardFocusManager()).setTypeaheadHandler(ke -> {
         if (myKeyEventDispatcher.dispatchKeyEvent(ke)) {
           ke.consume();
@@ -633,6 +634,10 @@ public final class IdeEventQueue extends EventQueue {
       ExceptionUtil.rethrow(t);
     }
 
+    if (t instanceof ControlFlowException) {
+      // make sure the exception is reported
+      t = new RuntimeException(t);
+    }
     StartupAbortedException.processException(t);
   }
 
@@ -939,6 +944,7 @@ public final class IdeEventQueue extends EventQueue {
   }
 
   public void pumpEventsForHierarchy(@NotNull Component modalComponent, @NotNull Future<?> exitCondition, @NotNull Predicate<? super AWTEvent> isCancelEvent) {
+    assert EventQueue.isDispatchThread();
     if (LOG.isDebugEnabled()) {
       LOG.debug("pumpEventsForHierarchy(" + modalComponent + ", " + exitCondition + ")");
     }
@@ -948,6 +954,9 @@ public final class IdeEventQueue extends EventQueue {
         boolean consumed = consumeUnrelatedEvent(modalComponent, event);
         if (!consumed) {
           dispatchEvent(event);
+        }
+        if (isCancelEvent.test(event)) {
+          break;
         }
       }
       catch (Throwable e) {
@@ -1029,6 +1038,11 @@ public final class IdeEventQueue extends EventQueue {
   @NotNull
   public IdeKeyEventDispatcher getKeyEventDispatcher() {
     return myKeyEventDispatcher;
+  }
+
+  @NotNull
+  public IdeMouseEventDispatcher getMouseEventDispatcher() {
+    return myMouseEventDispatcher;
   }
 
   /**

@@ -61,7 +61,7 @@ class ClassLoaderConfigurator(
     for ((mainDependent, value) in mainToSub) {
       val mainDependentClassLoader = mainDependent.classLoader as PluginClassLoader
       if (isClassloaderPerDescriptorEnabled(mainDependent)) {
-        for (dependency in mainDependent.pluginDependencies!!) {
+        for (dependency in mainDependent.pluginDependencies) {
           urlClassLoaderBuilder.files(mainDependentClassLoader.files)
           for (subDescriptor in value) {
             if (subDescriptor === dependency.subDescriptor) {
@@ -119,7 +119,7 @@ class ClassLoaderConfigurator(
     urlClassLoaderBuilder.files(classPath)
 
     val pluginDependencies = mainDependent.pluginDependencies
-    if (pluginDependencies == null) {
+    if (pluginDependencies.isEmpty()) {
       assert(!mainDependent.isUseIdeaClassLoader)
       mainDependent.classLoader = createPluginClassLoader(mainDependent)
       return
@@ -226,11 +226,9 @@ class ClassLoaderConfigurator(
     val pluginDependencies = dependent.pluginDependencies
 
     // add config-less dependencies to classloader parents
-    if (pluginDependencies != null) {
-      for (subDependency in pluginDependencies) {
-        if (!subDependency.isDisabledOrBroken && subDependency.subDescriptor == null) {
-          addClassloaderIfDependencyEnabled(subDependency.pluginId, dependent)
-        }
+    for (subDependency in pluginDependencies) {
+      if (!subDependency.isDisabledOrBroken && subDependency.subDescriptor == null) {
+        addClassloaderIfDependencyEnabled(subDependency.pluginId, dependent)
       }
     }
     val subClassloader = if (pluginPackagePrefix == null) {
@@ -245,10 +243,8 @@ class ClassLoaderConfigurator(
     }
 
     dependent.classLoader = subClassloader
-    if (pluginDependencies != null) {
-      for (subDependency in pluginDependencies) {
-        configureSubPlugin(subDependency, subClassloader, dependent)
-      }
+    for (subDependency in pluginDependencies) {
+      configureSubPlugin(subDependency, subClassloader, dependent)
     }
   }
 
@@ -265,7 +261,7 @@ class ClassLoaderConfigurator(
           "(descriptorFile=${dependent.descriptorPath})", parentDescriptor.id
         )
       }
-      for (dependencyPluginDependency in parentDescriptor.pluginDependencies!!) {
+      for (dependencyPluginDependency in parentDescriptor.pluginDependencies) {
         if (!dependencyPluginDependency.isDisabledOrBroken && dependencyPluginDependency.subDescriptor != null &&
             dependentModuleDependency.packageName == dependencyPluginDependency.subDescriptor!!.packagePrefix) {
           val classLoader = dependencyPluginDependency.subDescriptor!!.classLoader
@@ -285,10 +281,10 @@ class ClassLoaderConfigurator(
 
     // must be first to ensure that it is used first to search classes (very important if main plugin descriptor doesn't have package prefix)
     // check dependencies between optional descriptors (aka modules in a new model) from different plugins
-    if (ClassLoaderConfigurationData.SEPARATE_CLASSLOADER_FOR_SUB && dependency.pluginDependencies != null) {
+    if (ClassLoaderConfigurationData.SEPARATE_CLASSLOADER_FOR_SUB && !dependency.pluginDependencies.isEmpty()) {
       for (dependentModuleDependency in dependent.dependencyDescriptor.modules) {
         if (dependency.contentDescriptor.findModuleByName(dependentModuleDependency.name) != null) {
-          for (pluginDependency in dependency.pluginDependencies!!) {
+          for (pluginDependency in dependency.pluginDependencies) {
             if (!pluginDependency.isDisabledOrBroken && pluginDependency.subDescriptor != null &&
                 dependentModuleDependency.packageName == pluginDependency.subDescriptor!!.packagePrefix) {
               loaders.add(pluginDependency.subDescriptor!!.classLoader!!)
@@ -301,7 +297,7 @@ class ClassLoaderConfigurator(
 
     val loader = dependency.classLoader
     if (loader == null) {
-      log.error(PluginLoadingError.formatErrorMessage(dependent, "requires missing class loader for '${dependency.getName()}'"))
+      log.error(PluginLoadingError.formatErrorMessage(dependent, "requires missing class loader for '${dependency.name}'"))
     }
     else if (loader !== coreLoader) {
       loaders.add(loader)
@@ -313,7 +309,7 @@ class ClassLoaderConfigurator(
                                   loaders: MutableCollection<ClassLoader>) {
     val loader = dependency.classLoader
     if (loader == null) {
-      log.error(PluginLoadingError.formatErrorMessage(dependent, "requires missing class loader for '${dependency.getName()}'"))
+      log.error(PluginLoadingError.formatErrorMessage(dependent, "requires missing class loader for '${dependency.name}'"))
     }
     else if (loader !== coreLoader) {
       loaders.add(loader)
@@ -322,7 +318,7 @@ class ClassLoaderConfigurator(
 
   private fun setPluginClassLoaderForMainAndSubPlugins(rootDescriptor: IdeaPluginDescriptorImpl, classLoader: ClassLoader?) {
     rootDescriptor.classLoader = classLoader
-    for (dependency in rootDescriptor.getPluginDependencies()) {
+    for (dependency in rootDescriptor.pluginDependencies) {
       if (dependency.subDescriptor != null) {
         val descriptor = idMap.get(dependency.pluginId)
         if (descriptor != null && descriptor.isEnabled) {
@@ -399,7 +395,7 @@ private fun createPluginClassLoader(parentLoaders: Array<ClassLoader>,
                                     resourceFileFactory: ClassPath.ResourceFileFactory?): PluginClassLoader {
   // main plugin descriptor
   if (descriptor.descriptorPath == null) {
-    when (descriptor.id!!.idString) {
+    when (descriptor.id.idString) {
       "com.intellij.diagram" -> {
         // multiple packages - intellij.diagram and intellij.diagram.impl modules
         return createPluginClassLoaderWithExtraPackage(parentLoaders = parentLoaders,
@@ -584,19 +580,25 @@ private fun createModuleContentBasedScope(descriptor: IdeaPluginDescriptorImpl):
 }
 
 private fun isClassloaderPerDescriptorEnabled(descriptor: IdeaPluginDescriptorImpl): Boolean {
-  return ClassLoaderConfigurationData.isClassloaderPerDescriptorEnabled(descriptor.id!!, descriptor.packagePrefix)
+  return ClassLoaderConfigurationData.isClassloaderPerDescriptorEnabled(descriptor.id, descriptor.packagePrefix)
 }
 
 private fun collectPackagePrefixes(dependent: IdeaPluginDescriptorImpl, packagePrefixes: MutableList<String>) {
   // from extensions
   dependent.unsortedEpNameToExtensionElements.values.forEach { extensionDescriptors ->
     for (extensionDescriptor in extensionDescriptors) {
-      if (!extensionDescriptor.element.hasAttributes()) {
+      if (extensionDescriptor.implementation != null) {
+        addPackageByClassNameIfNeeded(extensionDescriptor.implementation!!, packagePrefixes)
+        continue
+      }
+
+      val element = extensionDescriptor.element ?: continue
+      if (!element.attributes.isEmpty()) {
         continue
       }
 
       for (attributeName in IMPL_CLASS_NAMES) {
-        val className = extensionDescriptor.element.getAttributeValue(attributeName)
+        val className = element.getAttributeValue(attributeName)
         if (className != null && !className.isEmpty()) {
           addPackageByClassNameIfNeeded(className, packagePrefixes)
           break
@@ -651,7 +653,7 @@ private fun addPackagePrefixIfNeeded(packagePrefixes: MutableList<String>, packa
 }
 
 private fun collectFromServices(containerDescriptor: ContainerDescriptor, packagePrefixes: MutableList<String>) {
-  for (service in (containerDescriptor.services ?: return)) {
+  for (service in containerDescriptor.services) {
     // testServiceImplementation is ignored by intention
     service.serviceImplementation?.let {
       addPackageByClassNameIfNeeded(it, packagePrefixes)

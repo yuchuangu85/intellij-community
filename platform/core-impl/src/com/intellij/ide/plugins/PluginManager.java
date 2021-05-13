@@ -16,6 +16,7 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.graph.Graph;
 import com.intellij.util.graph.GraphAlgorithms;
 import com.intellij.util.graph.GraphGenerator;
+import com.intellij.util.graph.InboundSemiGraph;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -64,20 +65,6 @@ public final class PluginManager {
   public static @Nullable Path getOnceInstalledIfExists() {
     Path onceInstalledFile = PathManager.getConfigDir().resolve(INSTALLED_TXT);
     return Files.isRegularFile(onceInstalledFile) ? onceInstalledFile : null;
-  }
-
-  public static @Nullable IdeaPluginDescriptorImpl loadDescriptor(@NotNull Path file,
-                                                                  @NotNull Set<PluginId> disabledPlugins,
-                                                                  boolean isBundled,
-                                                                  @NotNull PathResolver pathResolver) {
-    DescriptorListLoadingContext parentContext = DescriptorListLoadingContext.createSingleDescriptorContext(disabledPlugins);
-    return PluginDescriptorLoader.loadDescriptorFromFileOrDir(file,
-                                                              PluginManagerCore.PLUGIN_XML,
-                                                              parentContext,
-                                                              pathResolver,
-                                                              isBundled,
-                                                              /* isEssential = */false,
-                                                              Files.isDirectory(file));
   }
 
   /**
@@ -223,24 +210,17 @@ public final class PluginManager {
   @ApiStatus.Internal
   public void setPlugins(@NotNull List<IdeaPluginDescriptor> descriptors) {
     @SuppressWarnings("SuspiciousToArrayCall")
-    IdeaPluginDescriptorImpl[] list = descriptors.toArray(PluginLoadingResult.EMPTY_ARRAY);
+    IdeaPluginDescriptorImpl[] list = descriptors.toArray(new IdeaPluginDescriptorImpl[0]);
     PluginManagerCore.doSetPlugins(list);
   }
 
+  @ApiStatus.Internal
   public boolean processAllBackwardDependencies(@NotNull IdeaPluginDescriptorImpl rootDescriptor,
                                                 boolean withOptionalDeps,
-                                                @NotNull Function<? super IdeaPluginDescriptor, FileVisitResult> consumer) {
-    Map<PluginId, IdeaPluginDescriptorImpl> idMap = new HashMap<>();
+                                                @NotNull Function<IdeaPluginDescriptorImpl, FileVisitResult> consumer) {
+    Map<PluginId, IdeaPluginDescriptorImpl> idMap = PluginManagerCore.buildPluginIdMap();
     Collection<IdeaPluginDescriptorImpl> allPlugins = PluginManagerCore.getAllPlugins();
-    for (IdeaPluginDescriptorImpl plugin : allPlugins) {
-      idMap.put(plugin.getPluginId(), plugin);
-    }
-
-    CachingSemiGraph<IdeaPluginDescriptorImpl> semiGraph = PluginManagerCore
-      .createPluginIdGraph(allPlugins,
-                           idMap::get,
-                           withOptionalDeps,
-                           PluginManagerCore.findPluginByModuleDependency(PluginManagerCore.ALL_MODULES_MARKER) != null);
+    CachingSemiGraph<IdeaPluginDescriptorImpl> semiGraph = PluginManagerCore.createPluginIdGraph(allPlugins, idMap, withOptionalDeps);
     Graph<IdeaPluginDescriptorImpl> graph = GraphGenerator.generate(semiGraph);
     Set<IdeaPluginDescriptorImpl> dependencies = new LinkedHashSet<>();
     GraphAlgorithms.getInstance().collectOutsRecursively(graph, rootDescriptor, dependencies);
@@ -253,6 +233,12 @@ public final class PluginManager {
       }
     }
     return true;
+  }
+
+  @NotNull IdeaPluginDescriptorImpl @NotNull [] getPluginsSortedByDependency(@NotNull List<IdeaPluginDescriptorImpl> descriptors) {
+    Map<PluginId, IdeaPluginDescriptorImpl> idMap = PluginManagerCore.buildPluginIdMap();
+    InboundSemiGraph<IdeaPluginDescriptorImpl> graph = PluginManagerCore.createPluginIdGraph(descriptors, idMap, true);
+    return PluginManagerCore.getTopologicallySorted(graph);
   }
 
   public @NotNull Disposable createDisposable(@NotNull Class<?> requestor) {

@@ -19,7 +19,7 @@ internal fun requestJsonObject(
 }
 
 @Suppress("TooGenericExceptionCaught") // Putting any potential issues in an Either.Left
-private fun requestString(
+internal fun requestString(
     url: String,
     acceptContentType: String,
     timeoutInSeconds: Int = 10,
@@ -74,6 +74,6 @@ private fun Throwable.log() = apply {
     }
 }
 
-internal class EmptyBodyException: RuntimeException(
+internal class EmptyBodyException : RuntimeException(
     PackageSearchBundle.message("packagesearch.search.client.response.body.is.empty")
 )

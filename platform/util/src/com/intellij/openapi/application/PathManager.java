@@ -377,13 +377,17 @@ public final class PathManager {
       ourLogPath = explicit;
     }
     else if (PATHS_SELECTOR != null && System.getProperty(PROPERTY_SYSTEM_PATH) == null) {
-      ourLogPath = platformPath(PATHS_SELECTOR, "Logs", "", "LOCALAPPDATA", LOG_DIRECTORY, "XDG_CACHE_HOME", ".cache", LOG_DIRECTORY);
+      ourLogPath = getDefaultLogPathFor(PATHS_SELECTOR);
     }
     else {
       ourLogPath = getSystemPath() + '/' + LOG_DIRECTORY;
     }
 
     return ourLogPath;
+  }
+
+  public static @NotNull String getDefaultLogPathFor(@NotNull String selector) {
+    return platformPath(selector, "Logs", "", "LOCALAPPDATA", LOG_DIRECTORY, "XDG_CACHE_HOME", ".cache", LOG_DIRECTORY);
   }
 
   public static @NotNull String getPluginTempPath() {
@@ -727,11 +731,7 @@ public final class PathManager {
     throw new UnsupportedOperationException("Unsupported OS: " + SystemInfoRt.OS_NAME);
   }
 
-  @NotNull
-  private static String getUnixPlatformPath(String userHome, String selector,
-                                            String xdgVar,
-                                            String xdgDfl,
-                                            String xdgSub) {
+  private static String getUnixPlatformPath(String userHome, String selector, @Nullable String xdgVar, String xdgDfl, String xdgSub) {
     String dir = xdgVar != null ? System.getenv(xdgVar) : null;
     if (dir == null || dir.isEmpty()) dir = userHome + '/' + xdgDfl;
     dir = dir + '/' + vendorName();

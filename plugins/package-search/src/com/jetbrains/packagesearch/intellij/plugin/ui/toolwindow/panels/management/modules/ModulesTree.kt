@@ -21,7 +21,6 @@ import com.jetbrains.packagesearch.intellij.plugin.util.logDebug
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -45,7 +44,7 @@ internal class ModulesTree(
     private var ignoreTargetModulesChanges = false
 
     private val mainScope = CoroutineScope(SupervisorJob() + AppUIExecutor.onUiThread().coroutineDispatchingContext()) +
-         CoroutineName("ModulesTree")
+        CoroutineName("ModulesTree")
 
     init {
         setCellRenderer(ModulesTreeItemRenderer())
@@ -54,7 +53,7 @@ internal class ModulesTree(
         showsRootHandles = true
         emptyText.text = PackageSearchBundle.message("packagesearch.ui.toolwindow.modulesTree.empty")
 
-        @Suppress("MagicNumber") // Gotta love Swing APIs
+        @Suppress("MagicNumber") // Swing dimension constants
         border = scaledEmptyBorder(left = 8)
 
         addTreeSelectionListener { event ->

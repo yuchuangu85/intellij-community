@@ -32,6 +32,7 @@ import com.intellij.openapi.vfs.encoding.EncodingManager
 import com.intellij.util.PathUtil
 import com.intellij.util.PathsList
 import com.intellij.util.SystemProperties
+import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.execution.ParametersListUtil
 import com.intellij.util.io.URLUtil
 import com.intellij.util.io.isDirectory
@@ -172,8 +173,15 @@ class JdkCommandLineSetup(private val request: TargetEnvironmentRequest) {
   private fun provideEnvironment(environment: TargetEnvironment,
                                  targetProgressIndicator: TargetProgressIndicator) {
     environmentPromise.setResult(environment to targetProgressIndicator)
-    for (upload in uploads) {
-      upload.volume.upload(upload.relativePath, targetProgressIndicator)
+    if (environment is TargetEnvironment.BatchUploader) {
+      environment.runBatchUpload(uploads = ContainerUtil.map(uploads) {
+        Pair(it.volume, it.relativePath)
+      }, targetProgressIndicator = targetProgressIndicator)
+    }
+    else {
+      for (upload in uploads) {
+        upload.volume.upload(upload.relativePath, targetProgressIndicator)
+      }
     }
     for (promise in dependingOnEnvironmentPromise) {
       promise.blockingGet(0)  // Just rethrows errors.
@@ -217,7 +225,7 @@ class JdkCommandLineSetup(private val request: TargetEnvironmentRequest) {
 
   @Throws(CantRunException::class)
   private fun setupEnvironment(javaParameters: SimpleJavaParameters) {
-    javaParameters.env.forEach { key: String, value: String? -> commandLine.addEnvironmentVariable(key, value) }
+    javaParameters.env.forEach { (key: String, value: String?) -> commandLine.addEnvironmentVariable(key, value) }
 
     if (request is LocalTargetEnvironmentRequest) {
       val type = if (javaParameters.isPassParentEnvs) ParentEnvironmentType.CONSOLE else ParentEnvironmentType.NONE
@@ -467,8 +475,8 @@ class JdkCommandLineSetup(private val request: TargetEnvironmentRequest) {
       val classpath: MutableSet<TargetValue<String>> = LinkedHashSet()
       classpath.add(requestUploadIntoTarget(JavaLanguageRuntimeType.CLASS_PATH_VOLUME, PathUtil.getJarPathForClass(commandLineWrapper)))
       // If kotlin agent starts it needs kotlin-stdlib in the classpath.
-      javaParameters.classPath.rootDirs.forEach {
-        it.getUserData(JdkUtil.AGENT_RUNTIME_CLASSPATH)?.let {
+      javaParameters.classPath.rootDirs.forEach { rootDir ->
+        rootDir.getUserData(JdkUtil.AGENT_RUNTIME_CLASSPATH)?.let {
           classpath.add(requestUploadIntoTarget(JavaLanguageRuntimeType.CLASS_PATH_VOLUME, it))
         }
       }
@@ -555,8 +563,8 @@ class JdkCommandLineSetup(private val request: TargetEnvironmentRequest) {
       appendVmParameter(it)
     }
     val targetDependentParameters = javaParameters.targetDependentParameters
-    targetDependentParameters.asTargetParameters().forEach {
-      val value = it.apply(request)
+    targetDependentParameters.asTargetParameters().forEach { javaParameterFunction ->
+      val value = javaParameterFunction.apply(request)
       value.resolvePaths(
         uploadPathsResolver = { path ->
           path.beforeUploadOrDownloadResolved(path.localPath)
@@ -581,14 +589,16 @@ class JdkCommandLineSetup(private val request: TargetEnvironmentRequest) {
       return
     }
 
-    if (vmParameter.startsWith("-agentpath:")) {
-      appendVmAgentParameter(vmParameter, "-agentpath:")
-    }
-    else if (vmParameter.startsWith("-javaagent:")) {
-      appendVmAgentParameter(vmParameter, "-javaagent:")
-    }
-    else {
-      commandLine.addParameter(vmParameter)
+    when {
+      vmParameter.startsWith("-agentpath:") -> {
+        appendVmAgentParameter(vmParameter, "-agentpath:")
+      }
+      vmParameter.startsWith("-javaagent:") -> {
+        appendVmAgentParameter(vmParameter, "-javaagent:")
+      }
+      else -> {
+        commandLine.addParameter(vmParameter)
+      }
     }
   }
 

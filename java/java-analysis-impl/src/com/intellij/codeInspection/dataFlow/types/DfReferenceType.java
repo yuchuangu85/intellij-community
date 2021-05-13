@@ -5,10 +5,13 @@ import com.intellij.codeInspection.dataFlow.DfaNullability;
 import com.intellij.codeInspection.dataFlow.Mutability;
 import com.intellij.codeInspection.dataFlow.TypeConstraint;
 import com.intellij.codeInspection.dataFlow.TypeConstraints;
-import com.intellij.codeInspection.dataFlow.jvm.JvmSpecialField;
+import com.intellij.codeInspection.dataFlow.jvm.SpecialField;
+import com.intellij.codeInspection.dataFlow.value.DerivedVariableDescriptor;
 import com.intellij.openapi.util.NlsSafe;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * Type that corresponds to JVM reference type; represents subset of possible reference values (may include null)
@@ -45,7 +48,7 @@ public interface DfReferenceType extends DfType {
    * @return special field if additional information is known about the special field of all referenced objects
    */
   @Nullable
-  default JvmSpecialField getSpecialField() {
+  default SpecialField getSpecialField() {
     return null;
   }
 
@@ -132,6 +135,54 @@ public interface DfReferenceType extends DfType {
       filtered = filtered.dropLocality();
     }
     return filtered.isSuperType(constant);
+  }
+
+  @Override
+  default DfType correctTypeOnFlush(DfType typeBeforeFlush) {
+    DfaNullability inherentNullability = this.getNullability();
+    if (inherentNullability == DfaNullability.NULLABLE) {
+      DfaNullability nullability = DfaNullability.fromDfType(typeBeforeFlush);
+      if (nullability == DfaNullability.FLUSHED || nullability == DfaNullability.NULL || nullability == DfaNullability.NOT_NULL) {
+        return dropNullability().meet(DfaNullability.FLUSHED.asDfType());
+      }
+    }
+    return this;
+  }
+
+  @Override
+  default DfType correctForClosure() {
+    DfReferenceType newType = dropLocality();
+    if (newType.getMutability() == Mutability.MUST_NOT_MODIFY) {
+      // If we must not modify parameter inside the method body itself,
+      // we may still be able to modify it inside nested closures,
+      // as they could be executed later.
+      newType = newType.dropMutability();
+    }
+    return newType;
+  }
+
+  @Override
+  @NotNull
+  default DfType getBasicType() {
+    return dropSpecialField();
+  }
+
+  @Override
+  default @NotNull List<@NotNull DerivedVariableDescriptor> getDerivedVariables() {
+    SpecialField field = SpecialField.fromQualifierType(this);
+    if (field != null) {
+      return List.of(field);
+    }
+    return List.of();
+  }
+
+  @Override
+  @NotNull
+  default DfType getDerivedValue(@NotNull DerivedVariableDescriptor derivedDescriptor) {
+    if (getSpecialField() == derivedDescriptor) {
+      return getSpecialFieldType();
+    }
+    return DfType.TOP;
   }
 
   @Override

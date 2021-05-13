@@ -1,12 +1,12 @@
-// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.updateSettings.impl;
 
 import com.intellij.ide.IdeBundle;
 import com.intellij.ide.plugins.*;
 import com.intellij.ide.plugins.marketplace.MarketplacePluginDownloadService;
 import com.intellij.ide.plugins.marketplace.PluginSignatureChecker;
-import com.intellij.ide.plugins.marketplace.statistics.enums.InstallationSourceEnum;
 import com.intellij.ide.plugins.marketplace.statistics.PluginManagerUsageCollector;
+import com.intellij.ide.plugins.marketplace.statistics.enums.InstallationSourceEnum;
 import com.intellij.ide.startup.StartupActionScriptManager;
 import com.intellij.internal.statistic.DeviceIdManager;
 import com.intellij.openapi.application.Application;
@@ -200,12 +200,12 @@ public final class PluginDownloader {
       if (Registry.is("marketplace.certificate.signature.check")) {
 
         if (isFromMarketplace) {
-          if (!PluginSignatureChecker.isSignedByJetBrains(myDescriptor, myFile)) {
+          if (!PluginSignatureChecker.verifyPluginByJetBrains(myDescriptor, myFile)) {
             myShownErrors = true;
             return null;
           }
         } else {
-          if (!PluginSignatureChecker.isSignedByCustomCertificates(myDescriptor, myFile)) {
+          if (!PluginSignatureChecker.verifyPluginByCustomCertificates(myDescriptor, myFile)) {
             myShownErrors = true;
             return null;
           }
@@ -321,7 +321,7 @@ public final class PluginDownloader {
     if (myOldFile != null) {
       IdeaPluginDescriptor installedPlugin = PluginManagerCore.getPlugin(myDescriptor.getPluginId());
       IdeaPluginDescriptorImpl fullDescriptor = installedPlugin instanceof IdeaPluginDescriptorImpl ?
-                                                PluginDescriptorLoader.tryLoadFullDescriptor((IdeaPluginDescriptorImpl)installedPlugin) :
+                                                (IdeaPluginDescriptorImpl)installedPlugin :
                                                 null;
       if (fullDescriptor == null ||
           !DynamicPlugins.unloadPlugin(fullDescriptor,

@@ -4,11 +4,14 @@ package com.intellij.codeInspection.dataFlow.java;
 import com.intellij.codeInsight.Nullability;
 import com.intellij.codeInspection.dataFlow.DfaPsiUtil;
 import com.intellij.codeInspection.dataFlow.NullabilityProblemKind;
+import com.intellij.codeInspection.dataFlow.java.anchor.JavaExpressionAnchor;
+import com.intellij.codeInspection.dataFlow.java.anchor.JavaMethodReferenceReturnAnchor;
 import com.intellij.codeInspection.dataFlow.java.inliner.CallInliner;
-import com.intellij.codeInspection.dataFlow.jvm.JvmTrap;
+import com.intellij.codeInspection.dataFlow.java.inst.*;
 import com.intellij.codeInspection.dataFlow.jvm.descriptors.PlainDescriptor;
-import com.intellij.codeInspection.dataFlow.lang.ir.ControlFlow;
-import com.intellij.codeInspection.dataFlow.lang.ir.inst.*;
+import com.intellij.codeInspection.dataFlow.jvm.transfer.TryCatchAllTrap;
+import com.intellij.codeInspection.dataFlow.lang.UnsatisfiedConditionProblem;
+import com.intellij.codeInspection.dataFlow.lang.ir.*;
 import com.intellij.codeInspection.dataFlow.types.DfType;
 import com.intellij.codeInspection.dataFlow.types.DfTypes;
 import com.intellij.codeInspection.dataFlow.value.*;
@@ -118,11 +121,26 @@ public class CFGBuilder {
    * <p>
    * Stack after: ... loaded_field
    *
-   * @param descriptor a {@link SpecialField} which describes a field to get
+   * @param descriptor a {@link DerivedVariableDescriptor} which describes a field to get
    * @return this builder
    */
-  public CFGBuilder unwrap(@NotNull SpecialField descriptor) {
-    return add(new UnwrapSpecialFieldInstruction(descriptor));
+  public CFGBuilder unwrap(@NotNull DerivedVariableDescriptor descriptor) {
+    return add(new UnwrapDerivedVariableInstruction(descriptor));
+  }
+
+  /**
+   * Generate instructions to wrap a special field value
+   * <p>
+   * Stack before: ... special_field_value
+   * <p>
+   * Stack after: ... wrapped_value
+   *
+   * @param targetType type of the qualifier
+   * @param descriptor a {@link DerivedVariableDescriptor} which describes a field to get
+   * @return this builder
+   */
+  public CFGBuilder wrap(@NotNull DfType targetType, @NotNull DerivedVariableDescriptor descriptor) {
+    return add(new WrapDerivedVariableInstruction(targetType, descriptor));
   }
 
   /**
@@ -136,7 +154,7 @@ public class CFGBuilder {
    * @return this builder
    */
   public CFGBuilder pushForWrite(DfaVariableValue variable) {
-    return add(new PushInstruction(variable, null, true));
+    return add(new JvmPushInstruction(variable, null, true));
   }
 
   /**
@@ -150,7 +168,7 @@ public class CFGBuilder {
    * @return this builder
    */
   public CFGBuilder push(DfaValue value) {
-    return add(new PushInstruction(value, null));
+    return add(new JvmPushInstruction(value, null));
   }
 
   /**
@@ -165,7 +183,7 @@ public class CFGBuilder {
    * @return this builder
    */
   public CFGBuilder push(DfaValue value, PsiExpression expression) {
-    return add(new PushInstruction(value, expression));
+    return add(new JvmPushInstruction(value, expression == null ? null : new JavaExpressionAnchor(expression)));
   }
 
   /**
@@ -194,7 +212,7 @@ public class CFGBuilder {
    * @return this builder
    */
   public CFGBuilder push(DfType value, PsiExpression expression) {
-    return add(new PushValueInstruction(value, expression));
+    return add(new PushValueInstruction(value, expression == null ? null : new JavaExpressionAnchor(expression)));
   }
 
   /**
@@ -257,8 +275,8 @@ public class CFGBuilder {
    * @param expression expression to bind top-of-stack value to
    * @return this builder
    */
-  public CFGBuilder resultOf(PsiExpression expression) {
-    return add(new ResultOfInstruction(expression));
+  public CFGBuilder resultOf(@NotNull PsiExpression expression) {
+    return add(new ResultOfInstruction(new JavaExpressionAnchor(expression)));
   }
 
   /**
@@ -302,7 +320,7 @@ public class CFGBuilder {
    * @return this builder
    */
   public CFGBuilder isInstance(PsiExpression anchor, @Nullable PsiExpression operand, @NotNull PsiType castType) {
-    return add(new InstanceofInstruction(anchor, operand, castType));
+    return add(new InstanceofInstruction(new JavaExpressionAnchor(anchor), operand, castType));
   }
 
   /**
@@ -333,7 +351,7 @@ public class CFGBuilder {
    * @return this builder
    */
   public CFGBuilder ifConditionIs(boolean value) {
-    ConditionalGotoInstruction gotoInstruction = new ConditionalGotoInstruction(null, value, null);
+    ConditionalGotoInstruction gotoInstruction = new ConditionalGotoInstruction(null, DfTypes.booleanValue(!value));
     myBranches.add(() -> gotoInstruction.setOffset(myAnalyzer.getInstructionCount()));
     return add(gotoInstruction);
   }
@@ -369,7 +387,9 @@ public class CFGBuilder {
    * @return this builder
    */
   public CFGBuilder ifNotNull() {
-    return pushNull().ifCondition(JavaTokenType.NE);
+    ConditionalGotoInstruction gotoInstruction = new ConditionalGotoInstruction(null, DfTypes.NULL);
+    myBranches.add(() -> gotoInstruction.setOffset(myAnalyzer.getInstructionCount()));
+    return add(gotoInstruction);
   }
 
   /**
@@ -419,7 +439,7 @@ public class CFGBuilder {
    * @return this builder
    */
   public CFGBuilder doWhileUnknown() {
-    ConditionalGotoInstruction jump = new ConditionalGotoInstruction(null, false, null);
+    ConditionalGotoInstruction jump = new ConditionalGotoInstruction(null, DfType.TOP, null);
     jump.setOffset(myAnalyzer.getInstructionCount());
     myBranches.add(() -> pushUnknown().add(jump));
     return this;
@@ -540,6 +560,23 @@ public class CFGBuilder {
   }
 
   /**
+   * Ensure that given condition (applied to top-of-stack) is held. Stack is unchanged.
+   * 
+   * @param relation relation (e.g. GT for 'top-of-stack > 0' condition)
+   * @param operand operand (e.g. DfTypes.intValue(0) for 'top-of-stack > 0' condition)
+   * @param problem a problem associated with condition failure
+   * @param exceptionType exception to throw if condition is not satisfied. If null, then on unsatisfied condition,
+   *                      the execution will just terminate.
+   * @return this builder.
+   */
+  public CFGBuilder ensure(@NotNull RelationType relation, @NotNull DfType operand, @NotNull UnsatisfiedConditionProblem problem,
+                           @Nullable String exceptionType) {
+    DfaControlTransferValue transfer = exceptionType == null ? null : myAnalyzer.createTransfer(exceptionType);
+    add(new EnsureInstruction(problem, relation, operand, transfer));
+    return this;
+  }
+
+  /**
    * Start try section. All exceptions from it will be directed to the subsequent catchAll() section.
    *
    * @param anchor PSI anchor to handle nested traps
@@ -547,7 +584,7 @@ public class CFGBuilder {
    */
   public CFGBuilder doTry(@NotNull PsiElement anchor) {
     ControlFlow.DeferredOffset offset = new ControlFlow.DeferredOffset();
-    myAnalyzer.pushTrap(new JvmTrap.TryCatchAll(anchor, offset));
+    myAnalyzer.pushTrap(new TryCatchAllTrap(anchor, offset));
     myBranches.add(() -> offset.setOffset(myAnalyzer.getInstructionCount()));
     return this;
   }
@@ -558,7 +595,7 @@ public class CFGBuilder {
    * @return this builder
    */
   public CFGBuilder catchAll() {
-    myAnalyzer.popTrap(JvmTrap.TryCatchAll.class);
+    myAnalyzer.popTrap(TryCatchAllTrap.class);
     GotoInstruction gotoInstruction = new GotoInstruction(null);
     add(gotoInstruction).end();
     myBranches.add(() -> gotoInstruction.setOffset(myAnalyzer.getInstructionCount()));
@@ -727,7 +764,7 @@ public class CFGBuilder {
     flushFields();
     myAnalyzer.addConditionalErrorThrow();
     PsiType functionalInterfaceType = functionalExpression.getType();
-    myAnalyzer.addMethodThrows(LambdaUtil.getFunctionalInterfaceMethod(functionalInterfaceType), null);
+    myAnalyzer.addMethodThrows(LambdaUtil.getFunctionalInterfaceMethod(functionalInterfaceType));
     PsiType returnType = LambdaUtil.getFunctionalInterfaceReturnType(functionalInterfaceType);
     if (returnType != null) {
       push(DfTypes.typedObject(returnType, DfaPsiUtil.getTypeNullability(returnType)));
@@ -782,7 +819,7 @@ public class CFGBuilder {
     if (qualifier == null) return false;
     PsiType type = qualifier.getOperand().getType();
     push(DfTypes.typedObject(type, Nullability.NOT_NULL));
-    add(new InstanceofInstruction(methodRef, null, type));
+    add(new InstanceofInstruction(new JavaMethodReferenceReturnAnchor(methodRef), null, type));
     return true;
   }
 
@@ -844,10 +881,10 @@ public class CFGBuilder {
         pushExpression(expression);
         pop();
       }
-      ConditionalGotoInstruction condGoto = new ConditionalGotoInstruction(null, false, null);
+      ConditionalGotoInstruction condGoto = new ConditionalGotoInstruction(null, DfTypes.TRUE, null);
       condGoto.setOffset(myAnalyzer.getInstructionCount());
       myBranches.add(() -> pushUnknown().add(condGoto));
-      DfaValue commonValue = DfaExpressionFactory.createCommonValue(factory, expressions, type);
+      DfaValue commonValue = JavaDfaValueFactory.createCommonValue(factory, expressions, type);
       if (DfaTypeValue.isUnknown(commonValue)) {
         flush(targetVariable).push(targetVariable);
       } else {
@@ -864,7 +901,7 @@ public class CFGBuilder {
       GotoInstruction gotoInstruction = new GotoInstruction(null, false);
       gotoInstruction.setOffset(myAnalyzer.getInstructionCount());
       dup().push(factory.getSentinel()).compare(JavaTokenType.EQEQ);
-      ConditionalGotoInstruction condGoto = new ConditionalGotoInstruction(null, false, null);
+      ConditionalGotoInstruction condGoto = new ConditionalGotoInstruction(null, DfTypes.TRUE);
       add(condGoto);
       assignTo(targetVariable);
       myBranches.add(() -> {

@@ -1,12 +1,11 @@
-/*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2021 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.dataFlow;
 
+import com.intellij.codeInspection.dataFlow.memory.EqClass;
 import com.intellij.codeInspection.dataFlow.value.RelationType;
-import gnu.trove.TLongArrayList;
-import gnu.trove.TLongHashSet;
-import gnu.trove.TLongIterator;
+import it.unimi.dsi.fastutil.longs.LongArrayList;
+import it.unimi.dsi.fastutil.longs.LongIterator;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -14,39 +13,43 @@ import java.util.AbstractSet;
 import java.util.Iterator;
 import java.util.List;
 
-final class DistinctPairSet extends AbstractSet<DistinctPairSet.DistinctPair> {
+public final class DistinctPairSet extends AbstractSet<DistinctPairSet.DistinctPair> {
   private final DfaMemoryStateImpl myState;
-  private final TLongHashSet myData;
+  private final LongOpenHashSet myData;
 
-  DistinctPairSet(DfaMemoryStateImpl state) {
+  public DistinctPairSet(DfaMemoryStateImpl state) {
     myState = state;
-    myData = new TLongHashSet();
+    myData = new LongOpenHashSet();
   }
 
-  DistinctPairSet(DfaMemoryStateImpl state, DistinctPairSet other) {
-    myData = new TLongHashSet(other.size());
+  public DistinctPairSet(DfaMemoryStateImpl state, DistinctPairSet other) {
+    myData = new LongOpenHashSet(other.myData);
     myState = state;
-    other.myData.forEach(myData::add);
   }
 
-  boolean addOrdered(int firstIndex, int secondIndex) {
-    TLongHashSet toAdd = new TLongHashSet();
+  public boolean addOrdered(int firstIndex, int secondIndex) {
+    LongOpenHashSet toAdd = new LongOpenHashSet();
+    LongOpenHashSet toRemove = new LongOpenHashSet();
     toAdd.add(createPair(firstIndex, secondIndex, true));
+    toRemove.add(createPair(firstIndex, secondIndex, false));
     for(DistinctPair pair : this) {
       if (!pair.isOrdered()) continue;
       if (pair.myFirst == secondIndex) {
         if (pair.mySecond == firstIndex || myData.contains(createPair(pair.mySecond, firstIndex, true))) return false;
         toAdd.add(createPair(firstIndex, pair.mySecond, true));
+        toRemove.add(createPair(firstIndex, pair.mySecond, false));
       } else if (pair.mySecond == firstIndex) {
         if (myData.contains(createPair(secondIndex, pair.myFirst, true))) return false;
         toAdd.add(createPair(pair.myFirst, secondIndex, true));
+        toRemove.add(createPair(pair.myFirst, secondIndex, false));
       }
     }
-    myData.addAll(toAdd.toArray());
+    myData.removeAll(toRemove);
+    myData.addAll(toAdd);
     return true;
   }
 
-  void addUnordered(int firstIndex, int secondIndex) {
+  public void addUnordered(int firstIndex, int secondIndex) {
     if (!myData.contains(createPair(firstIndex, secondIndex, true)) &&
         !myData.contains(createPair(secondIndex, firstIndex, true))) {
       myData.add(createPair(firstIndex, secondIndex, false));
@@ -82,7 +85,7 @@ final class DistinctPairSet extends AbstractSet<DistinctPairSet.DistinctPair> {
   @Override
   public Iterator<DistinctPair> iterator() {
     return new Iterator<>() {
-      final TLongIterator iterator = myData.iterator();
+      final LongIterator iterator = myData.iterator();
 
       @Override
       public boolean hasNext() {
@@ -91,7 +94,7 @@ final class DistinctPairSet extends AbstractSet<DistinctPairSet.DistinctPair> {
 
       @Override
       public DistinctPair next() {
-        return decode(iterator.next());
+        return decode(iterator.nextLong());
       }
 
       @Override
@@ -114,8 +117,8 @@ final class DistinctPairSet extends AbstractSet<DistinctPairSet.DistinctPair> {
    * @return true if merge is successful, false if classes were distinct
    */
   public boolean unite(int c1Index, int c2Index) {
-    TLongArrayList c2Pairs = new TLongArrayList();
-    long[] distincts = myData.toArray();
+    LongArrayList c2Pairs = new LongArrayList();
+    long[] distincts = myData.toLongArray();
     for (long distinct : distincts) {
       int pc1 = low(distinct);
       int pc2 = high(distinct);
@@ -138,7 +141,7 @@ final class DistinctPairSet extends AbstractSet<DistinctPairSet.DistinctPair> {
     }
 
     for (int i = 0; i < c2Pairs.size(); i++) {
-      long c = c2Pairs.get(i);
+      long c = c2Pairs.getLong(i);
       myData.remove(c);
       if (c >= 0) {
         myData.add(createPair(c1Index, low(c) == c2Index ? high(c) : low(c), false));
@@ -154,9 +157,9 @@ final class DistinctPairSet extends AbstractSet<DistinctPairSet.DistinctPair> {
   }
 
   public void splitClass(int index, int[] splitIndices) {
-    TLongArrayList toAdd = new TLongArrayList();
-    for(TLongIterator iterator = myData.iterator(); iterator.hasNext(); ) {
-      DistinctPair pair = decode(iterator.next());
+    LongArrayList toAdd = new LongArrayList();
+    for(LongIterator iterator = myData.iterator(); iterator.hasNext(); ) {
+      DistinctPair pair = decode(iterator.nextLong());
       if (pair.myFirst == index) {
         for (int splitIndex : splitIndices) {
           toAdd.add(createPair(splitIndex, pair.mySecond, pair.isOrdered()));
@@ -169,7 +172,7 @@ final class DistinctPairSet extends AbstractSet<DistinctPairSet.DistinctPair> {
         iterator.remove();
       }
     }
-    myData.addAll(toAdd.toNativeArray());
+    myData.addAll(toAdd);
   }
 
   public boolean areDistinctUnordered(int c1Index, int c2Index) {
@@ -177,7 +180,7 @@ final class DistinctPairSet extends AbstractSet<DistinctPairSet.DistinctPair> {
   }
 
   @Nullable
-  RelationType getRelation(int c1Index, int c2Index) {
+  public RelationType getRelation(int c1Index, int c2Index) {
     if (areDistinctUnordered(c1Index, c2Index)) {
       return RelationType.NE;
     }
@@ -217,7 +220,7 @@ final class DistinctPairSet extends AbstractSet<DistinctPairSet.DistinctPair> {
     return (int)((Math.abs(l) & 0xFFFFFFFF00000000L) >> 32);
   }
 
-  static final class DistinctPair {
+  public static final class DistinctPair {
     private final int myFirst;
     private final int mySecond;
     private final boolean myOrdered;

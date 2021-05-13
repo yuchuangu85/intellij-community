@@ -7,6 +7,7 @@ import com.intellij.ide.plugins.advertiser.PluginData
 import com.intellij.ide.plugins.marketplace.MarketplaceRequests
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.components.service
@@ -34,7 +35,6 @@ open class PluginAdvertiserService {
     val disabledPlugins = HashMap<PluginData, IdeaPluginDescriptor>()
 
     val ids = mutableMapOf<PluginId, PluginData>()
-    val marketplaceRequests = MarketplaceRequests.Instance
     unknownFeatures.forEach { feature ->
       ProgressManager.checkCanceled()
       val featureType = feature.featureType
@@ -53,7 +53,7 @@ open class PluginAdvertiserService {
         putFeature(installedPluginData)
       }
       else {
-        marketplaceRequests
+        MarketplaceRequests.Instance
           .getFeatures(featureType, implementationName)
           .mapNotNull { it.toPluginData() }
           .forEach { putFeature(it) }
@@ -76,7 +76,7 @@ open class PluginAdvertiserService {
       emptyList()
     else
       RepositoryHelper.mergePluginsFromRepositories(
-        marketplaceRequests.loadLastCompatiblePluginDescriptors(ids.keys),
+        MarketplaceRequests.loadLastCompatiblePluginDescriptors(ids.keys),
         customPlugins,
         true,
       ).filterNot { loadedPlugin ->
@@ -157,15 +157,9 @@ open class PluginAdvertiserService {
         return@invokeLater
       }
 
-      val notification = notificationGroup.createNotification(
-        "",
-        notificationMessage,
-        NotificationType.INFORMATION,
-        null,
-      )
-
-      notification.addActions(notificationActions)
-      notification.notify(project)
+      notificationGroup.createNotification(notificationMessage, NotificationType.INFORMATION)
+        .addActions(notificationActions as Collection<AnAction>)
+        .notify(project)
     }
   }
 

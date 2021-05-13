@@ -109,6 +109,11 @@ public final class StartupUtil {
     startupStart = StartUpMeasurer.startActivity("app initialization preparation");
 
     Main.setFlags(args);
+
+    if (!Main.isHeadless() && !checkGraphics()) {
+      System.exit(Main.NO_GRAPHICS);
+    }
+
     CommandLineArgs.parse(args);
 
     LoadingState.setStrictMode();
@@ -284,6 +289,16 @@ public final class StartupUtil {
     AWTAutoShutdown.getInstance().notifyThreadFree(busyThread);
   }
 
+  private static boolean checkGraphics() {
+    if (GraphicsEnvironment.isHeadless()) {
+      Main.showMessage(BootstrapBundle.message("bootstrap.error.title.startup.error"),
+                  BootstrapBundle.message("bootstrap.error.message.no.graphics.environment"),
+                  true);
+      return false;
+    }
+    return true;
+  }
+
   /** Called via reflection from {@link com.intellij.ide.WindowsCommandLineProcessor#processWindowsLauncherCommandLine}. */
   @SuppressWarnings("UnusedDeclaration")
   public static int processWindowsLauncherCommandLine(String currentDirectory, String[] args) {
@@ -346,19 +361,8 @@ public final class StartupUtil {
     /* called from IDE init thread */
     default void beforeImportConfigs() {}
 
-    /* called from EDT */
-    default void beforeStartupWizard() {}
-
-    /* called from EDT */
-    default void startupWizardFinished(@NotNull CustomizeIDEWizardStepsProvider provider) {}
-
     /* called from IDE init thread */
     default void importFinished(@NotNull Path newConfigDir) {}
-
-    /* called from EDT */
-    default int customizeIdeWizardDialog(@NotNull List<? extends AbstractCustomizeWizardStep> steps) {
-      return -1;
-    }
   }
 
   private static void runPreAppClass(@NotNull Logger log, @NotNull String[] args) {
@@ -900,45 +904,24 @@ public final class StartupUtil {
     return path;
   }
 
+  /**
+   * Used in Rider
+   */
   private static void runStartupWizard(@NotNull AppStarter appStarter) {
-    String stepsProviderName = ApplicationInfoImpl.getShadowInstance().getCustomizeIDEWizardStepsProvider();
-    if (stepsProviderName == null) {
-      return;
-    }
+    String stepsDialogName = ApplicationInfoImpl.getShadowInstance().getWelcomeWizardDialog();
+    if (stepsDialogName == null) return;
 
-    CustomizeIDEWizardStepsProvider provider;
     try {
-      Class<?> providerClass = Class.forName(stepsProviderName);
-      provider = (CustomizeIDEWizardStepsProvider)providerClass.getDeclaredConstructor().newInstance();
+      Class<?> dialogClass = Class.forName(stepsDialogName);
+      Constructor<?> constr = dialogClass.getConstructor(AppStarter.class);
+      ((CommonCustomizeIDEWizardDialog) constr.newInstance(appStarter)).showIfNeeded();
     }
     catch (Throwable e) {
       Main.showMessage(BootstrapBundle.message("bootstrap.error.title.configuration.wizard.failed"), e);
       return;
     }
 
-    appStarter.beforeStartupWizard();
-
-    String stepsDialogName = ApplicationInfoImpl.getShadowInstance().getCustomizeIDEWizardDialog();
-    if (System.getProperty("idea.temp.change.ide.wizard") != null) { // temporary until 211 release
-      stepsDialogName = System.getProperty("idea.temp.change.ide.wizard");
-    }
-    if (stepsDialogName != null) {
-      try {
-        Class<?> dialogClass = Class.forName(stepsDialogName);
-        Constructor<?> constr = dialogClass.getConstructor(AppStarter.class);
-        ((CommonCustomizeIDEWizardDialog) constr.newInstance(appStarter)).showIfNeeded();
-      }
-      catch (Throwable e) {
-        Main.showMessage(BootstrapBundle.message("bootstrap.error.title.configuration.wizard.failed"), e);
-        return;
-      }
-    }
-    else if (Boolean.parseBoolean(System.getProperty("idea.show.customize.ide.wizard"))) {
-      new CustomizeIDEWizardDialog(provider, appStarter, true, false).showIfNeeded();
-    }
-
     PluginManagerCore.invalidatePlugins();
-    appStarter.startupWizardFinished(provider);
   }
 
   // must be called from EDT

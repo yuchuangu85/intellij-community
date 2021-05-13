@@ -10,6 +10,7 @@ import com.intellij.codeInsight.daemon.impl.EditorTracker
 import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.actionSystem.ex.ActionManagerEx
+import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.editor.Caret
@@ -41,7 +42,6 @@ import com.intellij.testFramework.LoggedErrorProcessor
 import com.intellij.testFramework.RunAll
 import com.intellij.testFramework.fixtures.JavaCodeInsightTestFixture
 import com.intellij.util.ThrowableRunnable
-import org.apache.log4j.Logger
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
 import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.config.CompilerSettings.Companion.DEFAULT_ADDITIONAL_ARGUMENTS
@@ -115,9 +115,9 @@ abstract class KotlinLightCodeInsightFixtureTestCase : KotlinLightCodeInsightFix
 
         if (captureExceptions) {
             LoggedErrorProcessor.setNewInstance(object : LoggedErrorProcessor() {
-                override fun processError(message: String?, t: Throwable?, details: Array<out String>?, logger: Logger) {
+                override fun processError(category: String, message: String?, t: Throwable?, details: Array<out String>): Boolean {
                     exceptions.addIfNotNull(t)
-                    super.processError(message, t, details, logger)
+                    return super.processError(category, message, t, details)
                 }
             })
         }
@@ -269,16 +269,11 @@ abstract class KotlinLightCodeInsightFixtureTestCase : KotlinLightCodeInsightFix
         val action = managerEx.getAction(actionId)
         val event = AnActionEvent(null, dataContext, ActionPlaces.UNKNOWN, Presentation(), managerEx, 0)
 
-        action.update(event)
-        if (!event.presentation.isEnabled) {
-            return false
+        if (ActionUtil.lastUpdateAndCheckDumb(action, event, false)) {
+            ActionUtil.performActionDumbAwareWithCallbacks(action, event)
+            return true
         }
-
-        managerEx.fireBeforeActionPerformed(action, dataContext, event)
-        action.actionPerformed(event)
-
-        managerEx.fireAfterActionPerformed(action, dataContext, event)
-        return true
+        return false
     }
 
     fun JavaCodeInsightTestFixture.configureByFile(file: File): PsiFile {

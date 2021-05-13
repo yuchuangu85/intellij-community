@@ -180,15 +180,15 @@ public final class ExtensionsRootType extends RootType {
     // search in enabled plugins only
     IdeaPluginDescriptorImpl plugin = (IdeaPluginDescriptorImpl)PluginManager.getInstance().findEnabledPlugin(pluginId);
     if (plugin == null) {
-      return ContainerUtil.emptyList();
+      return Collections.emptyList();
     }
 
     ClassLoader pluginClassLoader = plugin.getPluginClassLoader();
     Enumeration<URL> resources = pluginClassLoader.getResources(EXTENSIONS_PATH + '/' + path);
     if (resources == null) {
-      return ContainerUtil.emptyList();
+      return Collections.emptyList();
     }
-    else if (plugin.isUseIdeaClassLoader()) {
+    else if (plugin.isUseIdeaClassLoader) {
       return ContainerUtil.toList(resources);
     }
 
@@ -197,7 +197,7 @@ public final class ExtensionsRootType extends RootType {
       urls.add(resources.nextElement());
     }
     // exclude parent classloader resources from list
-    for (PluginDependency it : plugin.getPluginDependencies()) {
+    for (PluginDependency it : plugin.pluginDependencies) {
       IdeaPluginDescriptor descriptor = PluginManagerCore.getPlugin(it.getPluginId());
       if (descriptor == null) {
         continue;

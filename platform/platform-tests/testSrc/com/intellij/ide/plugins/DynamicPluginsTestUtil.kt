@@ -20,15 +20,16 @@ import java.util.function.Supplier
 internal fun loadDescriptorInTest(dir: Path, disabledPlugins: Set<PluginId> = emptySet(), isBundled: Boolean = false): IdeaPluginDescriptorImpl {
   assertThat(dir).exists()
   PluginManagerCore.getAndClearPluginLoadingErrors()
-  val buildNumber = BuildNumber.fromString("2042.42")
-  val parentContext = DescriptorListLoadingContext(disabledPlugins, PluginLoadingResult(emptyMap(), Supplier { buildNumber }))
-  val result = PluginDescriptorLoader.loadDescriptorFromFileOrDir(file = dir,
-                                                                  pathName = PluginManagerCore.PLUGIN_XML,
-                                                                  context = parentContext,
-                                                                  pathResolver = PluginXmlPathResolver.DEFAULT_PATH_RESOLVER,
-                                                                  isBundled = isBundled,
-                                                                  isEssential = true,
-                                                                  isDirectory = Files.isDirectory(dir))
+  val buildNumber = BuildNumber.fromString("2042.42")!!
+  val parentContext = DescriptorListLoadingContext(disabledPlugins = disabledPlugins,
+                                                   result = PluginLoadingResult(emptyMap(), Supplier { buildNumber }))
+  val result = loadDescriptorFromFileOrDir(file = dir,
+                                           pathName = PluginManagerCore.PLUGIN_XML,
+                                           context = parentContext,
+                                           pathResolver = PluginXmlPathResolver.DEFAULT_PATH_RESOLVER,
+                                           isBundled = isBundled,
+                                           isEssential = true,
+                                           isDirectory = Files.isDirectory(dir))
   if (result == null) {
     @Suppress("USELESS_CAST")
     assertThat(PluginManagerCore.getAndClearPluginLoadingErrors()).isNotEmpty()
@@ -79,7 +80,7 @@ internal fun loadPluginWithText(pluginBuilder: PluginBuilder, loader: ClassLoade
 
 internal fun setPluginClassLoaderForMainAndSubPlugins(rootDescriptor: IdeaPluginDescriptorImpl, classLoader: ClassLoader?) {
   rootDescriptor.classLoader = classLoader
-  for (dependency in rootDescriptor.getPluginDependencies()) {
+  for (dependency in rootDescriptor.pluginDependencies) {
     if (dependency.subDescriptor != null) {
       dependency.subDescriptor!!.classLoader = classLoader
     }

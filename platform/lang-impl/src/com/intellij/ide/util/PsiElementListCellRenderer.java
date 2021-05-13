@@ -3,9 +3,7 @@ package com.intellij.ide.util;
 
 import com.intellij.ide.ui.UISettings;
 import com.intellij.lang.LangBundle;
-import com.intellij.navigation.ColoredItemPresentation;
-import com.intellij.navigation.ItemPresentation;
-import com.intellij.navigation.NavigationItem;
+import com.intellij.navigation.*;
 import com.intellij.openapi.application.AccessToken;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
@@ -30,9 +28,8 @@ import com.intellij.ui.DirtyUI;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.ui.speedSearch.SpeedSearchUtil;
-import com.intellij.util.IconUtil;
-import com.intellij.util.ObjectUtils;
-import com.intellij.util.SlowOperations;
+import com.intellij.util.*;
+import com.intellij.util.concurrency.annotations.RequiresReadLock;
 import com.intellij.util.text.Matcher;
 import com.intellij.util.text.MatcherHolder;
 import com.intellij.util.ui.UIUtil;
@@ -46,6 +43,7 @@ import javax.accessibility.AccessibleContext;
 import javax.swing.*;
 import java.awt.*;
 import java.util.Comparator;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 import static com.intellij.openapi.vfs.newvfs.VfsPresentationUtil.getFileBackgroundColor;
@@ -59,7 +57,6 @@ public abstract class PsiElementListCellRenderer<T extends PsiElement> extends J
   private static final SimpleTextAttributes DEFAULT_ERROR_ATTRIBUTES =
     new SimpleTextAttributes(SimpleTextAttributes.STYLE_WAVED, UIUtil.getInactiveTextColor(), JBColor.RED);
 
-  private boolean myFocusBorderEnabled = Registry.is("psi.element.list.cell.renderer.focus.border.enabled");
   protected int myRightComponentWidth;
 
   private final ListCellRenderer<PsiElement> myBackgroundRenderer;
@@ -90,14 +87,6 @@ public abstract class PsiElementListCellRenderer<T extends PsiElement> extends J
     return accessibleContext;
   }
 
-  @NotNull
-  protected static Color getBackgroundColor(@Nullable Object value) {
-    PsiElement psiElement = NavigationItemListCellRenderer.getPsiElement(value);
-    VirtualFile virtualFile = PsiUtilCore.getVirtualFile(psiElement);
-    Color fileColor = virtualFile == null ? null : getFileBackgroundColor(psiElement.getProject(), virtualFile);
-    return fileColor != null ? fileColor : UIUtil.getListBackground();
-  }
-
   public static class ItemMatchers {
     @Nullable public final Matcher nameMatcher;
     @Nullable final Matcher locationMatcher;
@@ -108,7 +97,7 @@ public abstract class PsiElementListCellRenderer<T extends PsiElement> extends J
     }
   }
 
-  final class LeftRenderer extends ColoredListCellRenderer<Object> {
+  private final class LeftRenderer extends ColoredListCellRenderer<Object> {
 
     private final ItemMatchers myMatchers;
 
@@ -120,7 +109,6 @@ public abstract class PsiElementListCellRenderer<T extends PsiElement> extends J
     protected void customizeCellRenderer(@NotNull JList<?> list, Object value, int index, boolean selected, boolean hasFocus) {
       Color bgColor = UIUtil.getListBackground();
       Color color = list.getForeground();
-      setPaintFocusBorder(hasFocus && UIUtil.isToUseDottedCellBorder() && myFocusBorderEnabled);
 
       PsiElement target = NavigationItemListCellRenderer.getPsiElement(value);
       VirtualFile vFile = PsiUtilCore.getVirtualFile(target);
@@ -220,20 +208,28 @@ public abstract class PsiElementListCellRenderer<T extends PsiElement> extends J
 
     removeAll();
     myRightComponentWidth = 0;
-    DefaultListCellRenderer rightRenderer = getRightCellRenderer(value);
-    Component rightCellRendererComponent = null;
-    JPanel spacer = null;
-    if (rightRenderer != null) {
-      Component result;
-      try (AccessToken ignore = SlowOperations.allowSlowOperations(SlowOperations.RENDERING)) {
-        result = rightRenderer.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-      }
-      rightCellRendererComponent = result;
-      add(rightCellRendererComponent, BorderLayout.EAST);
+
+    final TextWithIcon itemLocation;
+    try (AccessToken ignore = SlowOperations.allowSlowOperations(SlowOperations.RENDERING)) {
+      itemLocation = getItemLocation(value);
+    }
+    final JLabel locationComponent;
+    final JPanel spacer;
+    if (itemLocation == null) {
+      locationComponent = null;
+      spacer = null;
+    }
+    else {
+      locationComponent = new JLabel(itemLocation.getText(), itemLocation.getIcon(), SwingConstants.RIGHT);
+      locationComponent.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, UIUtil.getListCellHPadding()));
+      locationComponent.setHorizontalTextPosition(SwingConstants.LEFT);
+      locationComponent.setForeground(isSelected ? UIUtil.getListSelectionForeground(true) : UIUtil.getInactiveTextColor());
+
+      add(locationComponent, BorderLayout.EAST);
       spacer = new JPanel();
       spacer.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 2));
       add(spacer, BorderLayout.CENTER);
-      myRightComponentWidth = rightCellRendererComponent.getPreferredSize().width;
+      myRightComponentWidth = locationComponent.getPreferredSize().width;
       myRightComponentWidth += spacer.getPreferredSize().width;
     }
 
@@ -246,10 +242,8 @@ public abstract class PsiElementListCellRenderer<T extends PsiElement> extends J
     add(leftCellRendererComponent, LEFT);
     final Color bg = isSelected ? UIUtil.getListSelectionBackground(true) : leftCellRendererComponent.getBackground();
     setBackground(bg);
-    if (rightCellRendererComponent != null) {
-      rightCellRendererComponent.setBackground(bg);
-    }
-    if (spacer != null) {
+    if (itemLocation != null) {
+      locationComponent.setBackground(bg);
       spacer.setBackground(bg);
     }
     return this;
@@ -265,9 +259,12 @@ public abstract class PsiElementListCellRenderer<T extends PsiElement> extends J
     return new ItemMatchers(MatcherHolder.getAssociatedMatcher(list), null);
   }
 
-  protected void setFocusBorderEnabled(boolean enabled) {
-    myFocusBorderEnabled = enabled;
-  }
+  /**
+   * @deprecated method has no effect
+   */
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.2")
+  @Deprecated
+  protected final void setFocusBorderEnabled(@SuppressWarnings("unused") boolean enabled) { }
 
   protected boolean customizeNonPsiElementLeftRenderer(ColoredListCellRenderer renderer,
                                                        JList list,
@@ -278,26 +275,45 @@ public abstract class PsiElementListCellRenderer<T extends PsiElement> extends J
     return false;
   }
 
-  final @Nullable DefaultListCellRenderer rightRenderer(Object value) {
-    return getRightCellRenderer(value);
-  }
-
-  @Nullable
-  protected DefaultListCellRenderer getRightCellRenderer(final Object value) {
+  protected @Nullable TextWithIcon getItemLocation(Object value) {
+    if (isGetRightCellRendererOverridden) {
+      return ModuleRendererFactory.getTextWithIcon(getRightCellRenderer(value), value);
+    }
     if (UISettings.getInstance().getShowIconInQuickNavigation()) {
-      return getModuleRenderer(value);
+      return getModuleTextWithIcon(value);
     }
     return null;
   }
 
-  @ApiStatus.Internal
-  public static @Nullable DefaultListCellRenderer getModuleRenderer(Object value) {
+  private final boolean isGetRightCellRendererOverridden = ReflectionUtil.getMethodDeclaringClass(
+    getClass(), "getRightCellRenderer", Object.class
+  ) != PsiElementListCellRenderer.class;
+
+  /**
+   * @deprecated override {@link #getItemLocation} instead
+   */
+  @Deprecated
+  @Nullable
+  protected DefaultListCellRenderer getRightCellRenderer(final Object value) {
+    if (!UISettings.getInstance().getShowIconInQuickNavigation()) {
+      return null;
+    }
     final DefaultListCellRenderer renderer = ModuleRendererFactory.findInstance(value).getModuleRenderer();
     if (renderer instanceof PlatformModuleRendererFactory.PlatformModuleRenderer) {
       // it won't display any new information
       return null;
     }
     return renderer;
+  }
+
+  @ApiStatus.Internal
+  public static @Nullable TextWithIcon getModuleTextWithIcon(Object value) {
+    ModuleRendererFactory factory = ModuleRendererFactory.findInstance(value);
+    if (factory instanceof PlatformModuleRendererFactory) {
+      // it won't display any new information
+      return null;
+    }
+    return factory.getModuleTextWithIcon(value);
   }
 
   public abstract @NlsSafe String getElementText(T element);
@@ -311,7 +327,9 @@ public abstract class PsiElementListCellRenderer<T extends PsiElement> extends J
   }
 
   @Iconable.IconFlags
-  protected abstract int getIconFlags();
+  protected int getIconFlags() {
+    return 0;
+  }
 
   protected Icon getIcon(PsiElement element) {
     return element.getIcon(getIconFlags());
@@ -327,9 +345,9 @@ public abstract class PsiElementListCellRenderer<T extends PsiElement> extends J
     return ReadAction.compute(() -> {
       String elementText = getElementText(element);
       String containerText = getContainerText(element, elementText);
-      DefaultListCellRenderer moduleRenderer = getModuleRenderer(element);
+      TextWithIcon moduleTextWithIcon = getModuleTextWithIcon(element);
       return (containerText == null ? elementText : elementText + " " + containerText) +
-             (moduleRenderer != null ? moduleRenderer.getText() : "");
+             (moduleTextWithIcon != null ? moduleTextWithIcon.getText() : "");
     });
   }
 
@@ -367,5 +385,57 @@ public abstract class PsiElementListCellRenderer<T extends PsiElement> extends J
         return o.toString();
       }
     });
+  }
+
+  @ApiStatus.Internal
+  @SuppressWarnings("unchecked")
+  @RequiresReadLock
+  public final @NotNull TargetPresentation computePresentation(@NotNull PsiElement element) {
+    return computePresentationInner((T)element);
+  }
+
+  private @NotNull TargetPresentation computePresentationInner(@NotNull T element) {
+    @NlsSafe String name = Objects.requireNonNullElseGet(getElementText(element), () -> {
+      LOG.error("Null name for PSI element " + element.getClass() + " (by " + this + ")");
+      return LangBundle.message("label.unknown");
+    });
+    TargetPresentationBuilder builder = TargetPresentation.builder(name);
+    builder = builder.icon(getIcon(element));
+
+    Project project = element.getProject();
+
+    VirtualFile vFile = PsiUtilCore.getVirtualFile(element);
+
+    TextAttributes presentableAttributes = getNavigationItemAttributes(element);
+    if (presentableAttributes != null) {
+      builder = builder.presentableTextAttributes(presentableAttributes);
+    }
+    else {
+      Color color = vFile == null ? null : FileStatusManager.getInstance(project).getStatus(vFile).getColor();
+      if (color != null) {
+        builder = builder.presentableTextAttributes(new SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, color).toTextAttributes());
+      }
+    }
+
+    if (vFile != null) {
+      builder = builder.backgroundColor(getFileBackgroundColor(project, vFile));
+    }
+
+    String containerText = getContainerText(element, name);
+    if (containerText != null) {
+      var matcher = CONTAINER_PATTERN.matcher(containerText);
+      boolean isProblemFile = vFile != null && WolfTheProblemSolver.getInstance(project).isProblemFile(vFile);
+      builder = builder.containerText(
+        matcher.matches() ? matcher.group(2) : containerText,
+        isProblemFile ? getErrorAttributes().toTextAttributes() : null
+      );
+    }
+
+    TextWithIcon itemLocation = getItemLocation(element);
+    if (itemLocation != null) {
+      builder = builder.locationText(itemLocation.getText(), itemLocation.getIcon());
+    }
+
+    return builder.presentation();
   }
 }

@@ -110,14 +110,14 @@ final class DistributionJARsBuilder {
       exclude(name: "**/icon-robots.txt")
     }
 
-    def productLayout = buildContext.productProperties.productLayout
-    def enabledPluginModules = getEnabledPluginModules()
+    ProductModulesLayout productLayout = buildContext.productProperties.productLayout
+    Set<String> enabledPluginModules = getEnabledPluginModules()
     buildContext.messages.debug("Collecting project libraries used by plugins: ")
     List<JpsLibrary> projectLibrariesUsedByPlugins = getPluginsByModules(buildContext, enabledPluginModules).collectMany { plugin ->
       final Collection<String> libsToUnpack = plugin.projectLibrariesToUnpack.values()
       plugin.moduleJars.values().collectMany {
-        def module = buildContext.findRequiredModule(it)
-        def libraries =
+        JpsModule module = buildContext.findRequiredModule(it)
+        Set<JpsLibrary> libraries =
           JpsJavaExtensionService.dependencies(module).includedIn(JpsJavaClasspathKind.PRODUCTION_RUNTIME).libraries.findAll { library ->
             !(library.createReference().parentReference instanceof JpsModuleReference) && !plugin.includedProjectLibraries.any {
               it.libraryName == library.name && it.relativeOutputPath == ""
@@ -141,7 +141,6 @@ final class DistributionJARsBuilder {
 
     platform = PlatformModules.createPlatformLayout(productLayout, allProductDependencies, projectLibrariesUsedByPlugins, buildContext)
   }
-
 
   @NotNull Set<PluginLayout> filterPluginsToPublish(@NotNull Set<PluginLayout> plugins) {
     plugins = plugins.findAll {
@@ -241,7 +240,9 @@ final class DistributionJARsBuilder {
                                                                                   currentBuildString,
                                                                                   buildContext.options.isInDevelopmentMode,
                                                                                   buildContext.messages)
-      buildContext.addDistFile(new Pair<Path, String>(targetFile, "bin"))
+      if (Files.exists(targetFile)) {
+        buildContext.addDistFile(new Pair<Path, String>(targetFile, "bin"))
+      }
     }
   }
 
@@ -1038,11 +1039,12 @@ final class DistributionJARsBuilder {
   }
 
   @SuppressWarnings('SpellCheckingInspection')
-  private static Set<String> excludedFromMergeLibs = Set.of(
-    "JDOM", "aalto-xml", "jna", "Log4J", "sqlite", "Slf4j", "Trove4j", "async-profiler", "precompiled_jshell-frontend",
+  private static final Set<String> excludedFromMergeLibs = Set.of(
+    "jna", "Log4J", "sqlite", "Slf4j", "async-profiler", "precompiled_jshell-frontend",
     "dexlib2", // android-only lib
     "intellij-coverage", "intellij-test-discovery", // used as agent
-    "winp", "junixsocket-core", "pty4j" // contains native library
+    "winp", "junixsocket-core", "pty4j", // contains native library
+    "protobuf", // https://youtrack.jetbrains.com/issue/IDEA-268753
   )
 
   private static void copyProjectLibraries(Path outputDir,
@@ -1086,14 +1088,12 @@ final class DistributionJARsBuilder {
         String lowerCasedLibName = libName.toLowerCase()
         if (mergeLibs) {
           String key
-          if (libName.startsWith("netty-")) {
-            key = "netty"
-          }
-          else if (!excludedFromMergeLibs.contains(libName) && !libName.startsWith("kotlin") && !libName.startsWith("rd-") &&
-                   !lowerCasedLibName.contains("annotations") &&
-                   !lowerCasedLibName.startsWith("junit") &&
-                   !lowerCasedLibName.startsWith("cucumber-") &&
-                   !lowerCasedLibName.contains("groovy")) {
+          if (!excludedFromMergeLibs.contains(libName) &&
+              !libName.startsWith("kotlin") && !libName.startsWith("rd-") &&
+              !lowerCasedLibName.contains("annotations") &&
+              !lowerCasedLibName.startsWith("junit") &&
+              !lowerCasedLibName.startsWith("cucumber-") &&
+              !lowerCasedLibName.contains("groovy")) {
             key = "3rd-party"
           }
           else {

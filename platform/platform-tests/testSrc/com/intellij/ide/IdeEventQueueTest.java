@@ -3,9 +3,11 @@ package com.intellij.ide;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
+import com.intellij.openapi.diagnostic.ControlFlowException;
 import com.intellij.openapi.diagnostic.DefaultLogger;
 import com.intellij.openapi.extensions.ExtensionNotApplicableException;
 import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.openapi.util.EmptyRunnable;
 import com.intellij.testFramework.LightPlatformTestCase;
 import com.intellij.testFramework.LoggedErrorProcessor;
 import com.intellij.testFramework.PlatformTestUtil;
@@ -19,12 +21,10 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.InputEvent;
-import java.awt.event.InvocationEvent;
-import java.awt.event.KeyEvent;
+import java.awt.event.*;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -174,13 +174,12 @@ public class IdeEventQueueTest extends LightPlatformTestCase {
   public void testNoExceptionEvenCreatedByThanosExtensionNotApplicableExceptionMustKillEDT() {
     assert SwingUtilities.isEventDispatchThread();
     DefaultLogger.disableStderrDumping(getTestRootDisposable());
-    throwInIdeEventQueueDispatch(ExtensionNotApplicableException.INSTANCE, null); // ControlFlowException silently ignored
-    throwInIdeEventQueueDispatch(new ProcessCanceledException(), null);  // ControlFlowException silently ignored
-    Error error = new Error();
-    throwInIdeEventQueueDispatch(error, error);
+    throwInIdeEventQueueDispatch(ExtensionNotApplicableException.INSTANCE, true); // ControlFlowException wrapped
+    throwInIdeEventQueueDispatch(new ProcessCanceledException(), true);  // ControlFlowException wrapped
+    throwInIdeEventQueueDispatch(new Error(), false);
   }
 
-  private void throwInIdeEventQueueDispatch(@NotNull Throwable toThrow, Throwable expectedToBeLogged) {
+  private void throwInIdeEventQueueDispatch(@NotNull Throwable toThrow, boolean shouldBeWrapped) {
     AtomicBoolean run = new AtomicBoolean();
     InvocationEvent event = new InvocationEvent(this, () -> {
       run.set(true);
@@ -190,9 +189,10 @@ public class IdeEventQueueTest extends LightPlatformTestCase {
     LoggedErrorProcessor old = LoggedErrorProcessor.getInstance();
     LoggedErrorProcessor.setNewInstance(new LoggedErrorProcessor() {
       @Override
-      public void processError(String message, Throwable t, String[] details, @NotNull org.apache.log4j.Logger logger) {
+      public boolean processError(@NotNull String category, String message, Throwable t, String @NotNull [] details) {
         assertNull(error.get());
         error.set(t);
+        return false;
       }
     });
 
@@ -204,6 +204,59 @@ public class IdeEventQueueTest extends LightPlatformTestCase {
       LoggedErrorProcessor.setNewInstance(old);
     }
     assertTrue(run.get());
-    assertSame(expectedToBeLogged, error.get());
+    Throwable actual = error.get();
+    if (shouldBeWrapped) {
+      assertNotNull(actual);
+      assertFalse(actual instanceof ControlFlowException);
+      assertSame(toThrow, actual.getCause());
+    }
+    else {
+      assertSame(toThrow, actual);
+    }
+  }
+
+  public void testPumpEventsForHierarchyMustExitOnIsCancelEventCondition() {
+    assert SwingUtilities.isEventDispatchThread();
+    IdeEventQueue ideEventQueue = IdeEventQueue.getInstance();
+    CompletableFuture<Object> future = new CompletableFuture<>();
+    TestTimeOut cancelEventTime = TestTimeOut.setTimeout(2, TimeUnit.SECONDS);
+    JLabel component = new JLabel();
+    long start = System.currentTimeMillis();
+    ideEventQueue.pumpEventsForHierarchy(component, future, event -> {
+      if (cancelEventTime.isTimedOut()) {
+        ideEventQueue.postEvent(new TextEvent(component, -239){
+          @Override
+          public String paramString() {
+            return "my";
+          }
+        });
+      }
+      // post InvocationEvent to give getNextEvent work to do
+      SwingUtilities.invokeLater(EmptyRunnable.getInstance());
+      return "my".equals(event.paramString());
+    });
+    long elapsedMs = System.currentTimeMillis() - start;
+    // check that first, we did exit the pumpEventsForHierarchy and second, at the right moment
+    assertTrue(String.valueOf(elapsedMs), cancelEventTime.isTimedOut());
+  }
+
+  public void testPumpEventsForHierarchyMustExitOnIsFutureDoneCondition() {
+    assert SwingUtilities.isEventDispatchThread();
+    IdeEventQueue ideEventQueue = IdeEventQueue.getInstance();
+    CompletableFuture<Object> future = new CompletableFuture<>();
+    TestTimeOut cancelEventTime = TestTimeOut.setTimeout(2, TimeUnit.SECONDS);
+    JLabel component = new JLabel();
+    long start = System.currentTimeMillis();
+    ideEventQueue.pumpEventsForHierarchy(component, future, __ -> {
+      if (cancelEventTime.isTimedOut()) {
+        future.complete(null);
+      }
+      // post InvocationEvent to give getNextEvent work to do
+      SwingUtilities.invokeLater(EmptyRunnable.getInstance());
+      return false;
+    });
+    long elapsedMs = System.currentTimeMillis() - start;
+    // check that first, we did exit the pumpEventsForHierarchy and second, at the right moment
+    assertTrue(String.valueOf(elapsedMs), cancelEventTime.isTimedOut());
   }
 }

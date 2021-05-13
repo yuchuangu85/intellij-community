@@ -101,12 +101,12 @@ public final class RepositoryHelper {
       indicator.setText2(IdeBundle.message("progress.connecting.to.plugin.manager", url.getAuthority()));
     }
 
-    List<PluginNode> descriptors = MarketplaceRequests.getInstance()
-      .readOrUpdateFile(pluginListFile,
-                        url.toExternalForm(),
-                        indicator,
-                        IdeBundle.message("progress.downloading.list.of.plugins", url.getAuthority()),
-                        MarketplaceRequests::parsePluginList);
+    List<PluginNode> descriptors = MarketplaceRequests.readOrUpdateFile(pluginListFile,
+                                                                        url.toExternalForm(),
+                                                                        indicator,
+                                                                        IdeBundle.message("progress.downloading.list.of.plugins",
+                                                                                          url.getAuthority()),
+                                                                        MarketplaceRequests::parsePluginList);
     return process(descriptors,
                    build != null ? build : PluginManagerCore.getBuildNumber(),
                    repositoryUrl);
@@ -177,14 +177,14 @@ public final class RepositoryHelper {
   private static boolean ideContainsUltimateModule() {
     IdeaPluginDescriptor corePlugin = PluginManagerCore.getPlugin(PluginManagerCore.CORE_ID);
     IdeaPluginDescriptorImpl corePluginImpl = (corePlugin instanceof IdeaPluginDescriptorImpl) ? (IdeaPluginDescriptorImpl)corePlugin : null;
-    return corePluginImpl != null && corePluginImpl.getModules().contains(PluginId.getId(ULTIMATE_MODULE));
+    return corePluginImpl != null && corePluginImpl.modules.contains(PluginId.getId(ULTIMATE_MODULE));
   }
 
   @ApiStatus.Internal
   public static @NotNull Collection<PluginNode> mergePluginsFromRepositories(@NotNull List<PluginNode> marketplacePlugins,
                                                                              @NotNull List<PluginNode> customPlugins,
                                                                              boolean addMissing) {
-    Map<PluginId, PluginNode> compatiblePluginMap = new HashMap<>(marketplacePlugins.size());
+    Map<PluginId, PluginNode> compatiblePluginMap = new LinkedHashMap<>(marketplacePlugins.size());
 
     for (PluginNode marketplacePlugin : marketplacePlugins) {
       compatiblePluginMap.put(marketplacePlugin.getPluginId(), marketplacePlugin);

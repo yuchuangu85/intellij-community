@@ -240,6 +240,10 @@ public final class PluginInstaller {
         return false;
       }
 
+      if (!PluginManagerMain.checkThirdPartyPluginsAllowed(List.of(pluginDescriptor))) {
+        return false;
+      }
+
       InstalledPluginsState ourState = InstalledPluginsState.getInstance();
       if (ourState.wasInstalled(pluginDescriptor.getPluginId())) {
         String message = IdeBundle.message("dialog.message.plugin.was.already.installed", pluginDescriptor.getName());
@@ -272,7 +276,7 @@ public final class PluginInstaller {
                                                             installedPlugin != null ? installedPlugin.getVersion() : null);
 
       if (Registry.is("marketplace.certificate.signature.check")) {
-        if (!PluginSignatureChecker.isSignedByAnyCertificates(pluginDescriptor, file)) {
+        if (!PluginSignatureChecker.verifyPluginByAllCertificates(pluginDescriptor, file)) {
           return false;
         }
       }

@@ -1,9 +1,15 @@
 // Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.dataFlow;
 
+import com.intellij.codeInspection.dataFlow.interpreter.DataFlowInterpreter;
+import com.intellij.codeInspection.dataFlow.java.anchor.JavaExpressionAnchor;
+import com.intellij.codeInspection.dataFlow.java.inst.AssignInstruction;
 import com.intellij.codeInspection.dataFlow.jvm.problems.JvmDfaProblem;
+import com.intellij.codeInspection.dataFlow.lang.DfaAnchor;
 import com.intellij.codeInspection.dataFlow.lang.UnsatisfiedConditionProblem;
-import com.intellij.codeInspection.dataFlow.lang.ir.inst.*;
+import com.intellij.codeInspection.dataFlow.lang.ir.*;
+import com.intellij.codeInspection.dataFlow.memory.DfaMemoryState;
+import com.intellij.codeInspection.dataFlow.memory.EqClass;
 import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeBinOp;
 import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeSet;
 import com.intellij.codeInspection.dataFlow.types.*;
@@ -23,7 +29,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 import java.util.function.Predicate;
 
-public class TrackingDfaMemoryState extends DfaMemoryStateImpl {
+public class TrackingDfaMemoryState extends JvmDfaMemoryStateImpl {
   private MemoryStateChange myHistory;
 
   protected TrackingDfaMemoryState(DfaValueFactory factory) {
@@ -348,12 +354,13 @@ public class TrackingDfaMemoryState extends DfaMemoryStateImpl {
         return new FactDefinition<>(null, extractor.extract(((DfaVariableValue)value).getInherentType()));
       }
       if (value instanceof DfaBinOpValue) {
-        FactDefinition<T> left = findFact(((DfaBinOpValue)value).getLeft(), extractor);
-        FactDefinition<T> right = findFact(((DfaBinOpValue)value).getRight(), extractor);
+        DfaBinOpValue binOp = (DfaBinOpValue)value;
+        FactDefinition<T> left = findFact(binOp.getLeft(), extractor);
+        FactDefinition<T> right = findFact(binOp.getRight(), extractor);
         if (left.myFact instanceof LongRangeSet && right.myFact instanceof LongRangeSet) {
-          LongRangeBinOp op = ((DfaBinOpValue)value).getOperation();
+          LongRangeBinOp op = binOp.getOperation();
           @SuppressWarnings("unchecked")
-          T result = (T)op.eval((LongRangeSet)left.myFact, (LongRangeSet)right.myFact, value.getDfType() instanceof DfLongType);
+          T result = (T)op.eval((LongRangeSet)left.myFact, (LongRangeSet)right.myFact, binOp.getDfType().getLongRangeType());
           return new FactDefinition<>(null, Objects.requireNonNull(result));
         }
       }
@@ -395,9 +402,11 @@ public class TrackingDfaMemoryState extends DfaMemoryStateImpl {
 
     @Nullable
     PsiExpression getExpression() {
-      if (myInstruction instanceof ExpressionPushingInstruction &&
-          ((ExpressionPushingInstruction<?>)myInstruction).getExpressionRange() == null) {
-        return (PsiExpression)((ExpressionPushingInstruction<?>)myInstruction).getExpression();
+      if (myInstruction instanceof ExpressionPushingInstruction) {
+        DfaAnchor anchor = ((ExpressionPushingInstruction)myInstruction).getDfaAnchor();
+        if (anchor instanceof JavaExpressionAnchor) {
+          return ((JavaExpressionAnchor)anchor).getExpression();
+        }
       }
       if (myInstruction instanceof ConditionalGotoInstruction) {
         return ObjectUtils.tryCast(((ConditionalGotoInstruction)myInstruction).getPsiAnchor(), PsiExpression.class);
@@ -405,7 +414,7 @@ public class TrackingDfaMemoryState extends DfaMemoryStateImpl {
       if (myInstruction instanceof EnsureInstruction) {
         UnsatisfiedConditionProblem problem = ((EnsureInstruction)myInstruction).getProblem();
         if (problem instanceof JvmDfaProblem) {
-          return ObjectUtils.tryCast(((JvmDfaProblem)problem).getAnchor(), PsiExpression.class);
+          return ObjectUtils.tryCast(((JvmDfaProblem<?>)problem).getAnchor(), PsiExpression.class);
         }
       }
       return null;
@@ -479,7 +488,7 @@ public class TrackingDfaMemoryState extends DfaMemoryStateImpl {
 
   private static class MergeInstruction extends Instruction {
     @Override
-    public DfaInstructionState[] accept(DataFlowRunner runner, DfaMemoryState stateBefore, InstructionVisitor visitor) {
+    public DfaInstructionState[] accept(@NotNull DataFlowInterpreter interpreter, @NotNull DfaMemoryState stateBefore) {
       return DfaInstructionState.EMPTY_ARRAY;
     }
 

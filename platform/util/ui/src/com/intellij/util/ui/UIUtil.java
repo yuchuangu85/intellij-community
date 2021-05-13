@@ -168,6 +168,10 @@ public final class UIUtil {
   }
 
   public static int getTransparentTitleBarHeight(JRootPane rootPane) {
+    Object property = rootPane.getClientProperty("Window.transparentTitleBarHeight");
+    if (property instanceof Integer) {
+      return (int)property;
+    }
     return "small".equals(rootPane.getClientProperty("Window.style")) ? 19 : 24;
   }
 
@@ -1455,9 +1459,17 @@ public final class UIUtil {
                                      final float startX,
                                      final float endX,
                                      final int height) {
-    Color c1 = JBColor.namedColor("SearchMatch.startBackground", JBColor.namedColor("SearchMatch.startColor", new Color(0xb3ffeaa2, true)));
-    Color c2 = JBColor.namedColor("SearchMatch.endBackground", JBColor.namedColor("SearchMatch.endColor", new Color(0xb3ffd042, true)));
-    drawSearchMatch(g, startX, endX, height, c1, c2);
+    drawSearchMatch(g, startX, endX, height, getSearchMatchGradientStartColor(), getSearchMatchGradientEndColor());
+  }
+
+  @NotNull
+  public static JBColor getSearchMatchGradientStartColor() {
+    return JBColor.namedColor("SearchMatch.startBackground", JBColor.namedColor("SearchMatch.startColor", new Color(0xb3ffeaa2, true)));
+  }
+
+  @NotNull
+  public static JBColor getSearchMatchGradientEndColor() {
+    return JBColor.namedColor("SearchMatch.endBackground", JBColor.namedColor("SearchMatch.endColor", new Color(0xb3ffd042, true)));
   }
 
   public static void drawSearchMatch(@NotNull Graphics2D g, float startXf, float endXf, int height, Color c1, Color c2) {
@@ -2654,7 +2666,7 @@ public final class UIUtil {
   }
 
   public static int getLcdContrastValue() {
-    int lcdContrastValue = Registry.intValue("lcd.contrast.value", 0);
+    int lcdContrastValue = LoadingState.APP_STARTED.isOccurred() ? Registry.intValue("lcd.contrast.value", 0) : 0;
     if (lcdContrastValue == 0) {
       return StartupUiUtil.doGetLcdContrastValueForSplash(StartupUiUtil.isUnderDarcula());
     }
